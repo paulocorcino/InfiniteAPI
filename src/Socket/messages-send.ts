@@ -1263,6 +1263,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				metrics.interactiveMessagesSent.inc({ type: buttonType })
 
 				try {
+					// Classify button types for native_flow name and bot node decisions
+					const CTA_BUTTON_NAMES = new Set(['cta_url', 'cta_copy', 'cta_call'])
+					const allButtonNames = nativeFlowButtons.map((b: any) => b?.name).filter(Boolean)
+					const hasCTA = allButtonNames.some((name: string) => CTA_BUTTON_NAMES.has(name))
+					const hasQuickReply = allButtonNames.some((name: string) => name === 'quick_reply')
+					const isCTAOnly = hasCTA && !hasQuickReply
+
 					// For listMessage (legacy format), use direct <list> tag
 					// This matches pastorini's working implementation
 					if (buttonType === 'list') {
@@ -1285,29 +1292,24 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						)
 					} else {
 						// Determine the native_flow name based on actual button types
-						// WhatsApp Web requires correct name attribute to render buttons:
-						// - CTA-only buttons (cta_url, cta_copy, cta_call): name should be empty ''
-						// - quick_reply-only buttons: name should be 'quick_reply'
-						// - mixed (CTA + quick_reply): name should be 'mixed'
-						const CTA_BUTTON_NAMES = new Set(['cta_url', 'cta_copy', 'cta_call'])
-						const buttonNames = nativeFlowButtons.map((b: any) => b?.name).filter(Boolean)
-						const hasCTA = buttonNames.some((name: string) => CTA_BUTTON_NAMES.has(name))
-						const hasQuickReply = buttonNames.some((name: string) => name === 'quick_reply')
-
-						let nativeFlowName: string
-						if (hasCTA && !hasQuickReply) {
-							// Pure CTA buttons - WhatsApp Web needs empty name for CTA rendering
-							nativeFlowName = ''
-						} else if (hasQuickReply && !hasCTA) {
-							// Pure quick_reply buttons
-							nativeFlowName = 'quick_reply'
-						} else {
-							// Mixed CTA + quick_reply or other combinations
-							nativeFlowName = 'mixed'
+						// Based on WhatsApp client traffic analysis (see getButtonArgs),
+						// the default name for regular native_flow buttons should be '' (empty)
+						// Only special flows (payment, mpm, order) need specific names
+						// Using '' for all regular buttons (CTA and quick_reply) ensures
+						// maximum compatibility with WhatsApp Web
+						const SPECIAL_FLOW_NAMES: Record<string, string> = {
+							'review_and_pay': 'payment_info',
+							'payment_info': 'payment_info',
+							'mpm': 'mpm',
+							'review_order': 'order_details'
 						}
+						const firstButtonName = allButtonNames[0] || ''
+
+						// Check if this is a special flow type, otherwise use '' for Web compatibility
+						const nativeFlowName = SPECIAL_FLOW_NAMES[firstButtonName] || ''
 
 						logger.info(
-							{ msgId, buttonNames, hasCTA, hasQuickReply, nativeFlowName },
+							{ msgId, buttonNames: allButtonNames, hasCTA, hasQuickReply, isCTAOnly, nativeFlowName, firstButtonName },
 							'[EXPERIMENTAL] Determined native_flow name based on button types'
 						)
 
@@ -1348,11 +1350,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						isLidUser(destinationJid) ||
 						destinationJid?.endsWith('@c.us')
 					) && !isJidBot(destinationJid)
-
-					// Detect if message contains only CTA buttons (no quick_reply)
-					const ctaButtonNames = new Set(['cta_url', 'cta_copy', 'cta_call'])
-					const allButtonNames = nativeFlowButtons.map((b: any) => b?.name).filter(Boolean)
-					const isCTAOnly = allButtonNames.length > 0 && allButtonNames.every((name: string) => ctaButtonNames.has(name))
 
 					if (isPrivateUserChat && !isCarousel && !isCatalog && buttonType !== 'list' && !isCTAOnly) {
 						;(stanza.content as BinaryNode[]).push({
