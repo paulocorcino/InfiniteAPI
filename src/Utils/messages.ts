@@ -1020,7 +1020,7 @@ export const generateListMessageLegacy = (
 			description,
 			buttonText,
 			footerText: footer,
-			listType: WAProto.Message.ListMessage.ListType.SINGLE_SELECT,
+			listType: WAProto.Message.ListMessage.ListType.PRODUCT_LIST,
 			sections: listInfo.sections.map(section => ({
 				title: section.title,
 				rows: section.rows.map(row => ({
@@ -1076,16 +1076,18 @@ export const generateWAMessageContent = async (
 	// Check for nativeList
 	else if (hasNonNullishProperty(message, 'nativeList')) {
 		const listMsg = message as any
-		const listOptions: ListMessageOptions = {
-			buttonText: listMsg.nativeList.buttonText,
-			sections: listMsg.nativeList.sections,
-			text: listMsg.text || '',
-			title: listMsg.title,
-			footer: listMsg.footer
-		}
-		const generated = generateListMessage(listOptions)
-		m.viewOnceMessage = generated.viewOnceMessage
-		options.logger?.info('Sending listMessage with viewOnceMessage wrapper')
+		// Use LEGACY format to avoid error 479
+		// Modern format (interactiveMessage) causes rejection
+		// Legacy format (listMessage) works on all platforms
+		const generated = generateListMessageLegacy(
+			{ sections: listMsg.nativeList.sections },
+			listMsg.title || listMsg.text || '',
+			listMsg.text || '',
+			listMsg.nativeList.buttonText,
+			listMsg.footer
+		)
+		m.listMessage = generated.listMessage
+		options.logger?.info('Sending listMessage with LEGACY format (fixes error 479)')
 	}
 	// Check for productList (multi-product message from catalog)
 	else if (hasNonNullishProperty(message, 'productList')) {

@@ -628,8 +628,12 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		} else if (message.templateMessage) {
 			return 'template'
 		} else if (message.listMessage) {
-			// All listMessages (SINGLE_SELECT and PRODUCT_LIST) need biz > list node
+ (SINGLE_SELECT and PRODUCT_LIST) need biz > list node
 			return 'list'
+
+			// listMessage works natively without biz node
+			return undefined
+
 		} else if (message.buttonsResponseMessage) {
 			return 'buttons_response'
 		} else if (message.listResponseMessage) {
@@ -671,8 +675,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			} else if (innerMessage.templateMessage) {
 				return 'template'
 			} else if (innerMessage.listMessage) {
+
 				// All listMessages (SINGLE_SELECT and PRODUCT_LIST) need biz > list node
 				return 'list'
+
+				// listMessage works natively without biz node
+				return undefined
+
 			} else if (innerMessage.buttonsResponseMessage) {
 				return 'buttons_response'
 			} else if (innerMessage.listResponseMessage) {
@@ -1215,6 +1224,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				metrics.interactiveMessagesSent.inc({ type: buttonType })
 
 				try {
+
 					// Differentiate biz node structure based on message type
 					// isListMessage: true for direct listMessage OR nativeFlowMessage with single_select
 					const isListMessage = buttonType === 'list' || isListNativeFlow(message)
@@ -1223,6 +1233,11 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						// For listMessage: use biz > list (type=product_list, v=2)
 						// This is the format that works on both phone and web WhatsApp
 						// Reference: Pastorini implementation
+=======
+					// For listMessage (legacy format), use direct <list> tag
+					// This matches pastorini's working implementation
+					if (buttonType === 'list') {
+
 						;(stanza.content as BinaryNode[]).push({
 							tag: 'biz',
 							attrs: {},
@@ -1238,11 +1253,18 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						})
 						logger.info(
 							{ msgId, to: destinationJid },
+
 							'[BIZ NODE] Added list biz node (type=product_list, v=2) for listMessage'
 						)
 					} else {
 						// For other interactive messages (native_flow, buttons, templates, carousels):
 						// use biz > interactive > native_flow
+=======
+							'[EXPERIMENTAL] Injected biz node for listMessage (legacy format)'
+						)
+					} else {
+						// Use nested structure: biz > interactive > native_flow
+						// For buttons, carousels, and other interactive messages
 						const interactiveType = 'native_flow'
 						;(stanza.content as BinaryNode[]).push({
 							tag: 'biz',
