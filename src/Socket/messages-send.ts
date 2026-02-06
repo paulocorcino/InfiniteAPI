@@ -1335,18 +1335,20 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						})
 					}
 
-					// For private 1:1 chats, conditionally add bot node
-					// - quick_reply buttons need bot node for response handling
-					// - CTA-only buttons (cta_url, cta_copy, cta_call) should NOT have bot node
-					//   as they are business actions and the bot node prevents WhatsApp Web rendering
-					// - Carousels and catalog messages should NOT have bot node
+					// Bot node (<bot biz_bot="1"/>) MUST NOT be injected for native_flow buttons
+					// It prevents WhatsApp Web/Desktop from rendering ALL button types
+					// (both quick_reply and CTA buttons). Confirmed by testing:
+					// - CTA buttons without bot node: works on Web ✅
+					// - quick_reply buttons with bot node: only smartphone, not Web ❌
+					const isNativeFlowButtons = buttonType === 'native_flow'
+
 					const isPrivateUserChat = (
 						isPnUser(destinationJid) ||
 						isLidUser(destinationJid) ||
 						destinationJid?.endsWith('@c.us')
 					) && !isJidBot(destinationJid)
 
-					if (isPrivateUserChat && !isCarousel && !isCatalog && buttonType !== 'list' && !isCTAOnly) {
+					if (isPrivateUserChat && !isCarousel && !isCatalog && buttonType !== 'list' && !isNativeFlowButtons) {
 						;(stanza.content as BinaryNode[]).push({
 							tag: 'bot',
 							attrs: { biz_bot: '1' }
@@ -1355,10 +1357,10 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							{ msgId, to: destinationJid },
 							'[EXPERIMENTAL] Added bot node for private chat interactive message'
 						)
-					} else if (isCTAOnly) {
+					} else if (isNativeFlowButtons) {
 						logger.debug(
 							{ msgId, to: destinationJid, buttonNames: allButtonNames },
-							'[EXPERIMENTAL] Skipping bot node for CTA-only buttons (Web compatibility)'
+							'[EXPERIMENTAL] Skipping bot node for native_flow buttons (Web/Desktop compatibility)'
 						)
 					} else if (isCarousel) {
 						logger.debug(
