@@ -1291,12 +1291,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							'[EXPERIMENTAL] Injected biz node for listMessage (legacy format)'
 						)
 					} else {
-						// Determine the native_flow name based on actual button types
-						// Based on WhatsApp client traffic analysis (see getButtonArgs),
-						// the default name for regular native_flow buttons should be '' (empty)
-						// Only special flows (payment, mpm, order) need specific names
-						// Using '' for all regular buttons (CTA and quick_reply) ensures
-						// maximum compatibility with WhatsApp Web
+						// Use 'mixed' as the native_flow name - this is required for message delivery
+						// Note: '' (empty) causes error 405 rejection from WhatsApp server
+						// Special flows (payment, mpm, order) use specific names
 						const SPECIAL_FLOW_NAMES: Record<string, string> = {
 							'review_and_pay': 'payment_info',
 							'payment_info': 'payment_info',
@@ -1304,12 +1301,10 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							'review_order': 'order_details'
 						}
 						const firstButtonName = allButtonNames[0] || ''
-
-						// Check if this is a special flow type, otherwise use '' for Web compatibility
-						const nativeFlowName = SPECIAL_FLOW_NAMES[firstButtonName] || ''
+						const nativeFlowName = SPECIAL_FLOW_NAMES[firstButtonName] || 'mixed'
 
 						logger.info(
-							{ msgId, buttonNames: allButtonNames, hasCTA, hasQuickReply, isCTAOnly, nativeFlowName, firstButtonName },
+							{ msgId, buttonNames: allButtonNames, hasCTA, hasQuickReply, isCTAOnly, nativeFlowName },
 							'[EXPERIMENTAL] Determined native_flow name based on button types'
 						)
 
