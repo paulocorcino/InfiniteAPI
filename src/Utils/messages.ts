@@ -1020,7 +1020,7 @@ export const generateListMessageLegacy = (
 			description,
 			buttonText,
 			footerText: footer,
-			listType: WAProto.Message.ListMessage.ListType.SINGLE_SELECT,
+			listType: WAProto.Message.ListMessage.ListType.PRODUCT_LIST,
 			sections: listInfo.sections.map(section => ({
 				title: section.title,
 				rows: section.rows.map(row => ({
