@@ -628,9 +628,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		} else if (message.templateMessage) {
 			return 'template'
 		} else if (message.listMessage) {
-			// All listMessage types need biz node with type="product_list"
-			// This includes SINGLE_SELECT and PRODUCT_LIST
-			return 'list'
+			// listMessage works natively without biz node
+			return undefined
 		} else if (message.buttonsResponseMessage) {
 			return 'buttons_response'
 		} else if (message.listResponseMessage) {
@@ -672,9 +671,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			} else if (innerMessage.templateMessage) {
 				return 'template'
 			} else if (innerMessage.listMessage) {
-				// All listMessage types need biz node with type="product_list"
-				// This includes SINGLE_SELECT and PRODUCT_LIST
-				return 'list'
+				// listMessage works natively without biz node
+				return undefined
 			} else if (innerMessage.buttonsResponseMessage) {
 				return 'buttons_response'
 			} else if (innerMessage.listResponseMessage) {
