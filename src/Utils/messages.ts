@@ -616,7 +616,6 @@ export const generateCarouselMessage = async (
 
 		const header: any = {
 			title: card.title || '',
-			subtitle: '',
 			hasMediaAttachment: hasMedia
 		}
 
@@ -641,7 +640,7 @@ export const generateCarouselMessage = async (
 		}
 	}))
 
-	// Build the interactive message with carousel (matching Pastorini structure)
+	// Build the interactive message with carousel (matching Pastorini structure exactly)
 	const interactiveMessage: proto.Message.IInteractiveMessage = {
 		body: { text: text || '' },
 		footer: footer ? { text: footer } : undefined,
@@ -651,15 +650,11 @@ export const generateCarouselMessage = async (
 		}
 	}
 
-	// Wrap in viewOnceMessage for WhatsApp Web/Desktop compatibility
-	// Without this wrapper, Web only renders header/body text
-	// Note: using minimal wrapper (no messageContextInfo) to avoid error 479
+	// Return as direct interactiveMessage (matching Pastorini exactly)
+	// Pastorini sends interactiveMessage without viewOnceMessage wrapper
+	// and it renders on Web. Biz node is injected separately in messages-send.ts
 	return {
-		viewOnceMessage: {
-			message: {
-				interactiveMessage
-			}
-		}
+		interactiveMessage
 	}
 }
 
@@ -1156,8 +1151,8 @@ export const generateWAMessageContent = async (
 		}
 		// Pass options for media processing if cards have images/videos
 		const generated = await generateCarouselMessage(carouselOptions, options)
-		m.viewOnceMessage = generated.viewOnceMessage
-		options.logger?.info('Sending carouselMessage with viewOnceMessage wrapper (no messageContextInfo)')
+		m.interactiveMessage = generated.interactiveMessage
+		options.logger?.info('Sending carouselMessage as direct interactiveMessage (matching Pastorini)')
 	}
 	// Check for nativeList
 	else if (hasNonNullishProperty(message, 'nativeList')) {
