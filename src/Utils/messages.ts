@@ -640,8 +640,9 @@ export const generateCarouselMessage = async (
 		}
 	}))
 
-	// Build the interactive message with carousel (matching Pastorini structure exactly)
+	// Build the interactive message with carousel
 	const interactiveMessage: proto.Message.IInteractiveMessage = {
+		header: text ? { title: text } : undefined,
 		body: { text: text || '' },
 		footer: footer ? { text: footer } : undefined,
 		carouselMessage: {
@@ -650,11 +651,14 @@ export const generateCarouselMessage = async (
 		}
 	}
 
-	// Return as direct interactiveMessage (matching Pastorini exactly)
-	// Pastorini sends interactiveMessage without viewOnceMessage wrapper
-	// and it renders on Web. Biz node is injected separately in messages-send.ts
+	// Wrap in viewOnceMessage for MD (multi-device) compatibility
+	// This ensures Web/Desktop clients can render the carousel
 	return {
-		interactiveMessage
+		viewOnceMessage: {
+			message: {
+				interactiveMessage
+			}
+		}
 	}
 }
 
@@ -1151,8 +1155,13 @@ export const generateWAMessageContent = async (
 		}
 		// Pass options for media processing if cards have images/videos
 		const generated = await generateCarouselMessage(carouselOptions, options)
-		m.interactiveMessage = generated.interactiveMessage
-		options.logger?.info('Sending carouselMessage as direct interactiveMessage (matching Pastorini)')
+		m.viewOnceMessage = generated.viewOnceMessage
+		options.logger?.info('Sending carousel with viewOnceMessage wrapper + fromObject encoding')
+		// Return early with fromObject for proper deep conversion of nested carousel structure
+		// fromObject recursively converts nested plain objects to protobuf message instances
+		// whereas create() does shallow property copy which may not properly encode deep structures
+		// This matches the working implementation's encoding approach
+		return WAProto.Message.fromObject(m)
 	}
 	// Check for nativeList
 	else if (hasNonNullishProperty(message, 'nativeList')) {
@@ -1642,11 +1651,9 @@ export const generateWAMessageContent = async (
 		}
 	}
 
-	// Skip messageContextInfo for carousel messages
-	// Carousel sent as direct interactiveMessage doesn't need reporting token
-	// and messageContextInfo alongside interactiveMessage causes error 479 on linked devices
-	const isCarouselMsg = !!m.interactiveMessage?.carouselMessage
-	if (shouldIncludeReportingToken(m) && !isCarouselMsg) {
+	// Add messageContextInfo with reporting token for non-carousel messages
+	// Carousel messages return early with fromObject encoding and don't need this
+	if (shouldIncludeReportingToken(m)) {
 		m.messageContextInfo = m.messageContextInfo || {}
 		if (!m.messageContextInfo.messageSecret) {
 			m.messageContextInfo.messageSecret = randomBytes(32)
