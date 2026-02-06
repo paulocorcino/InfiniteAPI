@@ -1263,6 +1263,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				metrics.interactiveMessagesSent.inc({ type: buttonType })
 
 				try {
+					// Classify button types for native_flow name and bot node decisions
+					const CTA_BUTTON_NAMES = new Set(['cta_url', 'cta_copy', 'cta_call'])
+					const allButtonNames = nativeFlowButtons.map((b: any) => b?.name).filter(Boolean)
+					const hasCTA = allButtonNames.some((name: string) => CTA_BUTTON_NAMES.has(name))
+					const hasQuickReply = allButtonNames.some((name: string) => name === 'quick_reply')
+					const isCTAOnly = hasCTA && !hasQuickReply
+
 					// For listMessage (legacy format), use direct <list> tag
 					// This matches pastorini's working implementation
 					if (buttonType === 'list') {
@@ -1284,6 +1291,28 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							'[EXPERIMENTAL] Injected biz node for listMessage (legacy format)'
 						)
 					} else {
+						// Determine the native_flow name based on actual button types
+						// Based on WhatsApp client traffic analysis (see getButtonArgs),
+						// the default name for regular native_flow buttons should be '' (empty)
+						// Only special flows (payment, mpm, order) need specific names
+						// Using '' for all regular buttons (CTA and quick_reply) ensures
+						// maximum compatibility with WhatsApp Web
+						const SPECIAL_FLOW_NAMES: Record<string, string> = {
+							'review_and_pay': 'payment_info',
+							'payment_info': 'payment_info',
+							'mpm': 'mpm',
+							'review_order': 'order_details'
+						}
+						const firstButtonName = allButtonNames[0] || ''
+
+						// Check if this is a special flow type, otherwise use '' for Web compatibility
+						const nativeFlowName = SPECIAL_FLOW_NAMES[firstButtonName] || ''
+
+						logger.info(
+							{ msgId, buttonNames: allButtonNames, hasCTA, hasQuickReply, isCTAOnly, nativeFlowName, firstButtonName },
+							'[EXPERIMENTAL] Determined native_flow name based on button types'
+						)
+
 						// Use nested structure: biz > interactive > native_flow
 						// For buttons, carousels, and other interactive messages
 						const interactiveType = 'native_flow'
@@ -1302,7 +1331,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 											tag: interactiveType,
 											attrs: {
 												v: '9',
-												name: 'mixed'
+												name: nativeFlowName
 											}
 										}
 									]
@@ -1311,18 +1340,18 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						})
 					}
 
-					// For private 1:1 chats, add bot node (required for some interactive messages to render)
-					// Only inject for actual user JIDs, not broadcasts, newsletters, or Meta AI bots
-					// IMPORTANT: Carousels and catalog messages should NOT have bot node
-					// as they are regular interactive messages, not bot messages
-					// NOTE: Only for regular JIDs, NOT hosted JIDs (to avoid interference with interactive messages)
+					// For private 1:1 chats, conditionally add bot node
+					// - quick_reply buttons need bot node for response handling
+					// - CTA-only buttons (cta_url, cta_copy, cta_call) should NOT have bot node
+					//   as they are business actions and the bot node prevents WhatsApp Web rendering
+					// - Carousels and catalog messages should NOT have bot node
 					const isPrivateUserChat = (
 						isPnUser(destinationJid) ||
 						isLidUser(destinationJid) ||
 						destinationJid?.endsWith('@c.us')
 					) && !isJidBot(destinationJid)
 
-					if (isPrivateUserChat && !isCarousel && !isCatalog && buttonType !== 'list') {
+					if (isPrivateUserChat && !isCarousel && !isCatalog && buttonType !== 'list' && !isCTAOnly) {
 						;(stanza.content as BinaryNode[]).push({
 							tag: 'bot',
 							attrs: { biz_bot: '1' }
@@ -1330,6 +1359,11 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						logger.debug(
 							{ msgId, to: destinationJid },
 							'[EXPERIMENTAL] Added bot node for private chat interactive message'
+						)
+					} else if (isCTAOnly) {
+						logger.debug(
+							{ msgId, to: destinationJid, buttonNames: allButtonNames },
+							'[EXPERIMENTAL] Skipping bot node for CTA-only buttons (Web compatibility)'
 						)
 					} else if (isCarousel) {
 						logger.debug(
