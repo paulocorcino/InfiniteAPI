@@ -6854,6 +6854,7 @@ export namespace proto {
                 title?: (string|null);
                 subtitle?: (string|null);
                 hasMediaAttachment?: (boolean|null);
+                hasSubtitle?: (boolean|null);
                 documentMessage?: (proto.Message.IDocumentMessage|null);
                 imageMessage?: (proto.Message.IImageMessage|null);
                 jpegThumbnail?: (Uint8Array|null);
@@ -6867,6 +6868,7 @@ export namespace proto {
                 public title?: (string|null);
                 public subtitle?: (string|null);
                 public hasMediaAttachment?: (boolean|null);
+                public hasSubtitle?: (boolean|null);
                 public documentMessage?: (proto.Message.IDocumentMessage|null);
                 public imageMessage?: (proto.Message.IImageMessage|null);
                 public jpegThumbnail?: (Uint8Array|null);
