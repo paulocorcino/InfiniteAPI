@@ -628,11 +628,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		} else if (message.templateMessage) {
 			return 'template'
 		} else if (message.listMessage) {
-			// Check if it's a product list (uses PRODUCT_LIST type)
-			// Product lists from WhatsApp Business catalog don't need biz node injection
-			if (message.listMessage.listType === proto.Message.ListMessage.ListType.PRODUCT_LIST) {
-				return undefined // No biz node needed for catalog product lists
-			}
+			// All listMessage types need biz node with type="product_list"
+			// This includes SINGLE_SELECT and PRODUCT_LIST
 			return 'list'
 		} else if (message.buttonsResponseMessage) {
 			return 'buttons_response'
@@ -643,15 +640,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		} else if (message.interactiveMessage) {
 			// Check if it has nativeFlowMessage (modern format)
 			if (message.interactiveMessage.nativeFlowMessage) {
-				// Check if it's a list (single_select or multi_select)
-				// Lists don't need biz node injection, similar to product lists
-				const buttons = message.interactiveMessage.nativeFlowMessage.buttons || []
-				const isListButton = buttons.some(
-					(btn: any) => btn?.name === 'single_select' || btn?.name === 'multi_select'
-				)
-				if (isListButton) {
-					return undefined // No biz node for list messages
-				}
 				return 'native_flow'
 			}
 			// Check if it's a carousel with nativeFlowMessage buttons in cards
@@ -684,10 +672,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			} else if (innerMessage.templateMessage) {
 				return 'template'
 			} else if (innerMessage.listMessage) {
-				// Product lists from WhatsApp Business catalog don't need biz node injection
-				if (innerMessage.listMessage.listType === proto.Message.ListMessage.ListType.PRODUCT_LIST) {
-					return undefined // No biz node needed for catalog product lists
-				}
+				// All listMessage types need biz node with type="product_list"
+				// This includes SINGLE_SELECT and PRODUCT_LIST
 				return 'list'
 			} else if (innerMessage.buttonsResponseMessage) {
 				return 'buttons_response'
@@ -698,15 +684,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			} else if (innerMessage.interactiveMessage) {
 				// Check if it has nativeFlowMessage (modern format)
 				if (innerMessage.interactiveMessage.nativeFlowMessage) {
-					// Check if it's a list (single_select or multi_select)
-					// Lists don't need biz node injection, similar to product lists
-					const buttons = innerMessage.interactiveMessage.nativeFlowMessage.buttons || []
-					const isListButton = buttons.some(
-						(btn: any) => btn?.name === 'single_select' || btn?.name === 'multi_select'
-					)
-					if (isListButton) {
-						return undefined // No biz node for list messages
-					}
 					return 'native_flow'
 				}
 				// Check if it's a carousel with nativeFlowMessage buttons in cards
@@ -1233,32 +1210,53 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				metrics.interactiveMessagesSent.inc({ type: buttonType })
 
 				try {
-					// Use nested structure: biz > interactive > native_flow
-					// For buttons, carousels, and other interactive messages
-					// NOTE: Lists now skip biz node injection (handled in getButtonType)
-					const interactiveType = 'native_flow'
-					;(stanza.content as BinaryNode[]).push({
-						tag: 'biz',
-						attrs: {},
-						content: [
-							{
-								tag: 'interactive',
-								attrs: {
-									type: interactiveType,
-									v: '1'
-								},
-								content: [
-									{
-										tag: interactiveType,
-										attrs: {
-											v: '9',
-											name: 'mixed'
-										}
+					// For listMessage (legacy format), use direct <list> tag
+					// This matches pastorini's working implementation
+					if (buttonType === 'list') {
+						;(stanza.content as BinaryNode[]).push({
+							tag: 'biz',
+							attrs: {},
+							content: [
+								{
+									tag: 'list',
+									attrs: {
+										type: 'product_list',
+										v: '2'
 									}
-								]
-							}
-						]
-					})
+								}
+							]
+						})
+						logger.info(
+							{ msgId, to: destinationJid },
+							'[EXPERIMENTAL] Injected biz node for listMessage (legacy format)'
+						)
+					} else {
+						// Use nested structure: biz > interactive > native_flow
+						// For buttons, carousels, and other interactive messages
+						const interactiveType = 'native_flow'
+						;(stanza.content as BinaryNode[]).push({
+							tag: 'biz',
+							attrs: {},
+							content: [
+								{
+									tag: 'interactive',
+									attrs: {
+										type: interactiveType,
+										v: '1'
+									},
+									content: [
+										{
+											tag: interactiveType,
+											attrs: {
+												v: '9',
+												name: 'mixed'
+											}
+										}
+									]
+								}
+							]
+						})
+					}
 
 					// For private 1:1 chats, add bot node (required for some interactive messages to render)
 					// Only inject for actual user JIDs, not broadcasts, newsletters, or Meta AI bots
