@@ -1284,6 +1284,33 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							'[EXPERIMENTAL] Injected biz node for listMessage (legacy format)'
 						)
 					} else {
+						// Determine the native_flow name based on actual button types
+						// WhatsApp Web requires correct name attribute to render buttons:
+						// - CTA-only buttons (cta_url, cta_copy, cta_call): name should be empty ''
+						// - quick_reply-only buttons: name should be 'quick_reply'
+						// - mixed (CTA + quick_reply): name should be 'mixed'
+						const CTA_BUTTON_NAMES = new Set(['cta_url', 'cta_copy', 'cta_call'])
+						const buttonNames = nativeFlowButtons.map((b: any) => b?.name).filter(Boolean)
+						const hasCTA = buttonNames.some((name: string) => CTA_BUTTON_NAMES.has(name))
+						const hasQuickReply = buttonNames.some((name: string) => name === 'quick_reply')
+
+						let nativeFlowName: string
+						if (hasCTA && !hasQuickReply) {
+							// Pure CTA buttons - WhatsApp Web needs empty name for CTA rendering
+							nativeFlowName = ''
+						} else if (hasQuickReply && !hasCTA) {
+							// Pure quick_reply buttons
+							nativeFlowName = 'quick_reply'
+						} else {
+							// Mixed CTA + quick_reply or other combinations
+							nativeFlowName = 'mixed'
+						}
+
+						logger.info(
+							{ msgId, buttonNames, hasCTA, hasQuickReply, nativeFlowName },
+							'[EXPERIMENTAL] Determined native_flow name based on button types'
+						)
+
 						// Use nested structure: biz > interactive > native_flow
 						// For buttons, carousels, and other interactive messages
 						const interactiveType = 'native_flow'
@@ -1302,7 +1329,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 											tag: interactiveType,
 											attrs: {
 												v: '9',
-												name: 'mixed'
+												name: nativeFlowName
 											}
 										}
 									]
@@ -1311,18 +1338,23 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						})
 					}
 
-					// For private 1:1 chats, add bot node (required for some interactive messages to render)
-					// Only inject for actual user JIDs, not broadcasts, newsletters, or Meta AI bots
-					// IMPORTANT: Carousels and catalog messages should NOT have bot node
-					// as they are regular interactive messages, not bot messages
-					// NOTE: Only for regular JIDs, NOT hosted JIDs (to avoid interference with interactive messages)
+					// For private 1:1 chats, conditionally add bot node
+					// - quick_reply buttons need bot node for response handling
+					// - CTA-only buttons (cta_url, cta_copy, cta_call) should NOT have bot node
+					//   as they are business actions and the bot node prevents WhatsApp Web rendering
+					// - Carousels and catalog messages should NOT have bot node
 					const isPrivateUserChat = (
 						isPnUser(destinationJid) ||
 						isLidUser(destinationJid) ||
 						destinationJid?.endsWith('@c.us')
 					) && !isJidBot(destinationJid)
 
-					if (isPrivateUserChat && !isCarousel && !isCatalog && buttonType !== 'list') {
+					// Detect if message contains only CTA buttons (no quick_reply)
+					const ctaButtonNames = new Set(['cta_url', 'cta_copy', 'cta_call'])
+					const allButtonNames = nativeFlowButtons.map((b: any) => b?.name).filter(Boolean)
+					const isCTAOnly = allButtonNames.length > 0 && allButtonNames.every((name: string) => ctaButtonNames.has(name))
+
+					if (isPrivateUserChat && !isCarousel && !isCatalog && buttonType !== 'list' && !isCTAOnly) {
 						;(stanza.content as BinaryNode[]).push({
 							tag: 'bot',
 							attrs: { biz_bot: '1' }
@@ -1330,6 +1362,11 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						logger.debug(
 							{ msgId, to: destinationJid },
 							'[EXPERIMENTAL] Added bot node for private chat interactive message'
+						)
+					} else if (isCTAOnly) {
+						logger.debug(
+							{ msgId, to: destinationJid, buttonNames: allButtonNames },
+							'[EXPERIMENTAL] Skipping bot node for CTA-only buttons (Web compatibility)'
 						)
 					} else if (isCarousel) {
 						logger.debug(
