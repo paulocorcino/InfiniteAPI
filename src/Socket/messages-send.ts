@@ -1225,7 +1225,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 			// EXPERIMENTAL: Try biz node injection for ALL interactive messages including catalog
 			// Previously we skipped catalog messages but they weren't rendering properly
-			if (buttonType && enableInteractiveMessages) {
+			if (buttonType && enableInteractiveMessages && !isCarousel) {
 				const startTime = Date.now()
 
 				// Debug: Log message structure to diagnose list detection
@@ -1384,6 +1384,12 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					)
 					metrics.interactiveMessagesFailures.inc({ type: buttonType, reason: 'injection_failed' })
 				}
+			} else if (isCarousel && buttonType) {
+				logger.info(
+					{ msgId, buttonType, to: destinationJid },
+					'[EXPERIMENTAL] Skipping biz node injection for carousel message (not needed, causes error 479)'
+				)
+				metrics.interactiveMessagesSent.inc({ type: 'carousel' })
 			} else if (buttonType && !enableInteractiveMessages) {
 				logger.warn(
 					{ msgId, buttonType },
