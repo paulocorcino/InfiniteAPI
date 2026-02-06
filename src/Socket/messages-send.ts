@@ -1443,8 +1443,11 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				}
 			}
 
+			// Skip tctoken for carousel messages - not present in working implementations
+			// and may cause error 479 on linked devices
+			const isCarouselForTcToken = isCarouselMessage(message)
 			const contactTcTokenData =
-				!isGroup && !isRetryResend && !isStatus ? await authState.keys.get('tctoken', [destinationJid]) : {}
+				!isGroup && !isRetryResend && !isStatus && !isCarouselForTcToken ? await authState.keys.get('tctoken', [destinationJid]) : {}
 
 			const tcTokenBuffer = contactTcTokenData[destinationJid]?.token
 
