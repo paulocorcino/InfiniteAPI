@@ -654,22 +654,16 @@ export const generateCarouselMessage = async (
 		},
 		carouselMessage: {
 			cards: carouselCards,
-			messageVersion: 1
+			messageVersion: 1,
+			carouselCardType: 1  // HSCROLL_CARDS - required for Web/Desktop to render carousel cards
 		}
 	}
 
-	// Wrap in viewOnceMessage - required for WhatsApp Web/Desktop rendering
-	// Without this wrapper, Web only shows the header/body text
+	// Return as direct interactiveMessage (no viewOnceMessage wrapper)
+	// viewOnceMessage causes error 479 rejection from linked devices (Web/Desktop)
+	// carouselCardType: 1 (HSCROLL_CARDS) tells Web how to render the cards
 	return {
-		viewOnceMessage: {
-			message: {
-				messageContextInfo: {
-					deviceListMetadata: {},
-					deviceListMetadataVersion: 2
-				},
-				interactiveMessage
-			}
-		}
+		interactiveMessage
 	}
 }
 
@@ -1166,8 +1160,8 @@ export const generateWAMessageContent = async (
 		}
 		// Pass options for media processing if cards have images/videos
 		const generated = await generateCarouselMessage(carouselOptions, options)
-		m.viewOnceMessage = generated.viewOnceMessage
-		options.logger?.info('Sending carouselMessage with viewOnceMessage wrapper')
+		m.interactiveMessage = generated.interactiveMessage
+		options.logger?.info('Sending carouselMessage with carouselCardType HSCROLL_CARDS')
 	}
 	// Check for nativeList
 	else if (hasNonNullishProperty(message, 'nativeList')) {
