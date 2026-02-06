@@ -30,6 +30,7 @@ import {
 	generateMessageIDV2,
 	generateParticipantHashV2,
 	generateWAMessage,
+	generateWAMessageContent,
 	getStatusCodeForMediaRetry,
 	getUrlFromDirectPath,
 	getWAUploadToServer,
@@ -1964,6 +1965,52 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			}
 
 			const userJid = authState.creds.me!.id
+
+			// Special path for carousel: call relayMessage directly
+			// This bypasses generateWAMessageFromContent (which adds contextInfo.expiration
+			// and calls WAProto.Message.create that may corrupt nested carousel structures)
+			// Matches the working implementation's approach: generateWAMessageContent → relayMessage
+			if (typeof content === 'object' && 'nativeCarousel' in content && (content as any).nativeCarousel) {
+				const messageId = generateMessageIDV2(sock.user?.id)
+				const msgContent = await generateWAMessageContent(content, {
+					logger,
+					upload: waUploadToServer,
+					mediaCache: config.mediaCache,
+					options: config.options,
+					jid,
+				})
+
+				const timestamp = unixTimestampSeconds()
+				const fullMsg = proto.WebMessageInfo.fromObject({
+					key: {
+						remoteJid: jid,
+						fromMe: true,
+						id: messageId
+					},
+					message: msgContent,
+					messageTimestamp: timestamp,
+					messageStubParameters: [],
+					participant: isJidGroup(jid) ? userJid : undefined,
+					status: proto.WebMessageInfo.Status.PENDING
+				}) as WAMessage
+
+				await relayMessage(jid, fullMsg.message!, {
+					messageId: fullMsg.key.id!,
+					useCachedGroupMetadata: options.useCachedGroupMetadata,
+					additionalAttributes: {},
+					statusJidList: options.statusJidList,
+				})
+
+				if (config.emitOwnEvents) {
+					process.nextTick(async () => {
+						const mutexKey = fullMsg.key.remoteJid || fullMsg.key.id || 'unknown'
+						await messageMutex.mutex(mutexKey, () => upsertMessage(fullMsg, 'append'))
+					})
+				}
+
+				return fullMsg
+			}
+
 			if (
 				typeof content === 'object' &&
 				'disappearingMessagesInChat' in content &&

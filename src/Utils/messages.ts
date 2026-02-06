@@ -616,7 +616,8 @@ export const generateCarouselMessage = async (
 
 		const header: any = {
 			title: card.title || '',
-			hasMediaAttachment: hasMedia
+			hasMediaAttachment: hasMedia,
+			hasSubtitle: !!card.title
 		}
 
 		// Process media if present
@@ -642,7 +643,7 @@ export const generateCarouselMessage = async (
 
 	// Build the interactive message with carousel
 	const interactiveMessage: proto.Message.IInteractiveMessage = {
-		header: text ? { title: text } : undefined,
+		header: text ? { title: text, hasSubtitle: true } : undefined,
 		body: { text: text || '' },
 		footer: footer ? { text: footer } : undefined,
 		carouselMessage: {
