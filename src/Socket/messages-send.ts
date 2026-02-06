@@ -628,12 +628,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		} else if (message.templateMessage) {
 			return 'template'
 		} else if (message.listMessage) {
- (SINGLE_SELECT and PRODUCT_LIST) need biz > list node
-			return 'list'
-
 			// listMessage works natively without biz node
 			return undefined
-
 		} else if (message.buttonsResponseMessage) {
 			return 'buttons_response'
 		} else if (message.listResponseMessage) {
@@ -675,13 +671,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			} else if (innerMessage.templateMessage) {
 				return 'template'
 			} else if (innerMessage.listMessage) {
-
-				// All listMessages (SINGLE_SELECT and PRODUCT_LIST) need biz > list node
-				return 'list'
-
 				// listMessage works natively without biz node
 				return undefined
-
 			} else if (innerMessage.buttonsResponseMessage) {
 				return 'buttons_response'
 			} else if (innerMessage.listResponseMessage) {
@@ -1208,13 +1199,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					'[DEBUG] Interactive message structure'
 				)
 
-				// Log message check for biz node (similar to Pastorini)
-				const messageKeys = Object.keys(message).filter(k => (message as any)[k] != null)
-				logger.info(
-					{ hasInteractive: !!interactiveMsg, messageKeys },
-					'[BIZ NODE] Checking message for biz node...'
-				)
-
 				logger.warn(
 					{ msgId, buttonType, to: destinationJid, enableInteractiveMessages, isCatalog },
 					'[EXPERIMENTAL] Injecting biz node for interactive message - may cause ban'
@@ -1224,20 +1208,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				metrics.interactiveMessagesSent.inc({ type: buttonType })
 
 				try {
-
-					// Differentiate biz node structure based on message type
-					// isListMessage: true for direct listMessage OR nativeFlowMessage with single_select
-					const isListMessage = buttonType === 'list' || isListNativeFlow(message)
-
-					if (isListMessage) {
-						// For listMessage: use biz > list (type=product_list, v=2)
-						// This is the format that works on both phone and web WhatsApp
-						// Reference: Pastorini implementation
-=======
 					// For listMessage (legacy format), use direct <list> tag
 					// This matches pastorini's working implementation
 					if (buttonType === 'list') {
-
 						;(stanza.content as BinaryNode[]).push({
 							tag: 'biz',
 							attrs: {},
@@ -1253,13 +1226,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						})
 						logger.info(
 							{ msgId, to: destinationJid },
-
-							'[BIZ NODE] Added list biz node (type=product_list, v=2) for listMessage'
-						)
-					} else {
-						// For other interactive messages (native_flow, buttons, templates, carousels):
-						// use biz > interactive > native_flow
-=======
 							'[EXPERIMENTAL] Injected biz node for listMessage (legacy format)'
 						)
 					} else {
@@ -1292,8 +1258,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 					// For private 1:1 chats, add bot node (required for some interactive messages to render)
 					// Only inject for actual user JIDs, not broadcasts, newsletters, or Meta AI bots
-					// IMPORTANT: Carousels, catalog messages, and list messages should NOT have bot node
-					// List messages use biz > list structure and don't need bot node
+					// IMPORTANT: Carousels and catalog messages should NOT have bot node
+					// as they are regular interactive messages, not bot messages
 					// NOTE: Only for regular JIDs, NOT hosted JIDs (to avoid interference with interactive messages)
 					const isPrivateUserChat = (
 						isPnUser(destinationJid) ||
@@ -1301,7 +1267,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						destinationJid?.endsWith('@c.us')
 					) && !isJidBot(destinationJid)
 
-					if (isPrivateUserChat && !isCarousel && !isCatalog && !isListMessage) {
+					if (isPrivateUserChat && !isCarousel && !isCatalog) {
 						;(stanza.content as BinaryNode[]).push({
 							tag: 'bot',
 							attrs: { biz_bot: '1' }
@@ -1319,11 +1285,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						logger.debug(
 							{ msgId, to: destinationJid, buttonType },
 							'[EXPERIMENTAL] Skipping bot node for catalog message (with biz node)'
-						)
-					} else if (isListMessage) {
-						logger.debug(
-							{ msgId, to: destinationJid, buttonType },
-							'[BIZ NODE] Skipping bot node for list message (uses list biz node)'
 						)
 					}
 
@@ -1412,10 +1373,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			if (additionalNodes && additionalNodes.length > 0) {
 				;(stanza.content as BinaryNode[]).push(...additionalNodes)
 			}
-
-			// Log stanza content tags for debugging (similar to Pastorini format)
-			const contentTags = (stanza.content as BinaryNode[]).map((n: BinaryNode) => n.tag)
-			logger.info({ msgId, contentTags }, `[STANZA] Content tags: ${JSON.stringify(contentTags)}`)
 
 			logger.debug({ msgId }, `sending message to ${participants.length} devices`)
 
