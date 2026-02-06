@@ -1215,32 +1215,54 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				metrics.interactiveMessagesSent.inc({ type: buttonType })
 
 				try {
-					// Use nested structure: biz > interactive > native_flow
-					// All interactive messages (buttons, lists, carousels) use native_flow
-					// Testing showed that type='list' causes error 479
-					const interactiveType = 'native_flow'
-					;(stanza.content as BinaryNode[]).push({
-						tag: 'biz',
-						attrs: {},
-						content: [
-							{
-								tag: 'interactive',
-								attrs: {
-									type: interactiveType,
-									v: '1'
-								},
-								content: [
-									{
-										tag: interactiveType,
-										attrs: {
-											v: '9',
-											name: 'mixed'
-										}
+					// Check if this is a list message to use the correct biz node structure
+					if (isListDetected) {
+						// For list messages, use direct <list> tag in biz node
+						// This structure works on Web, iOS, and Android
+						;(stanza.content as BinaryNode[]).push({
+							tag: 'biz',
+							attrs: {},
+							content: [
+								{
+									tag: 'list',
+									attrs: {
+										type: 'single_select',
+										v: '2'
 									}
-								]
-							}
-						]
-					})
+								}
+							]
+						})
+						logger.info(
+							{ msgId, to: destinationJid },
+							'[EXPERIMENTAL] Injected list-specific biz node for Web/iOS/Android compatibility'
+						)
+					} else {
+						// Use nested structure: biz > interactive > native_flow
+						// For buttons, carousels, and other interactive messages
+						const interactiveType = 'native_flow'
+						;(stanza.content as BinaryNode[]).push({
+							tag: 'biz',
+							attrs: {},
+							content: [
+								{
+									tag: 'interactive',
+									attrs: {
+										type: interactiveType,
+										v: '1'
+									},
+									content: [
+										{
+											tag: interactiveType,
+											attrs: {
+												v: '9',
+												name: 'mixed'
+											}
+										}
+									]
+								}
+							]
+						})
+					}
 
 					// For private 1:1 chats, add bot node (required for some interactive messages to render)
 					// Only inject for actual user JIDs, not broadcasts, newsletters, or Meta AI bots
