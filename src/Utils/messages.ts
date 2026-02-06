@@ -1712,6 +1712,10 @@ export const generateWAMessageFromContent = (
 		}
 	}
 
+	// Skip ephemeral contextInfo for carousel messages - carousel was already
+	// processed with fromObject and adding contextInfo.expiration may cause
+	// error 479 on linked devices (Web/Desktop)
+	const isCarouselEphemeral = !!(message as any)?.viewOnceMessage?.message?.interactiveMessage?.carouselMessage
 	if (
 		// if we want to send a disappearing message
 		!!options?.ephemeralExpiration &&
@@ -1720,7 +1724,9 @@ export const generateWAMessageFromContent = (
 		// already not converted to disappearing message
 		key !== 'ephemeralMessage' &&
 		// newsletters don't support ephemeral messages
-		!isJidNewsletter(jid)
+		!isJidNewsletter(jid) &&
+		// carousel messages should not have ephemeral contextInfo
+		!isCarouselEphemeral
 	) {
 		/* @ts-ignore */
 		innerMessage[key].contextInfo = {
@@ -1730,7 +1736,13 @@ export const generateWAMessageFromContent = (
 		}
 	}
 
-	message = WAProto.Message.create(message)
+	// For carousel messages already processed with fromObject, skip create() to
+	// preserve the deep protobuf conversion. create() does shallow assignment which
+	// may not properly handle deeply nested carousel structures (cards > headers > media)
+	const isCarouselVOM = !!(message as any)?.viewOnceMessage?.message?.interactiveMessage?.carouselMessage
+	if (!isCarouselVOM) {
+		message = WAProto.Message.create(message)
+	}
 
 	const messageJSON = {
 		key: {
