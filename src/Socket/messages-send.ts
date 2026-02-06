@@ -628,8 +628,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		} else if (message.templateMessage) {
 			return 'template'
 		} else if (message.listMessage) {
-			// listMessage works natively without biz node
-			return undefined
+			// All listMessages (SINGLE_SELECT and PRODUCT_LIST) need biz > list node
+			return 'list'
 		} else if (message.buttonsResponseMessage) {
 			return 'buttons_response'
 		} else if (message.listResponseMessage) {
@@ -671,8 +671,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			} else if (innerMessage.templateMessage) {
 				return 'template'
 			} else if (innerMessage.listMessage) {
-				// listMessage works natively without biz node
-				return undefined
+				// All listMessages (SINGLE_SELECT and PRODUCT_LIST) need biz > list node
+				return 'list'
 			} else if (innerMessage.buttonsResponseMessage) {
 				return 'buttons_response'
 			} else if (innerMessage.listResponseMessage) {
@@ -1322,7 +1322,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						destinationJid?.endsWith('@c.us')
 					) && !isJidBot(destinationJid)
 
-					if (isPrivateUserChat && !isCarousel && !isCatalog) {
+					if (isPrivateUserChat && !isCarousel && !isCatalog && buttonType !== 'list') {
 						;(stanza.content as BinaryNode[]).push({
 							tag: 'bot',
 							attrs: { biz_bot: '1' }
