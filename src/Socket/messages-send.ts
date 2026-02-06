@@ -829,6 +829,61 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		useUserDevicesCache = useUserDevicesCache !== false
 		useCachedGroupMetadata = useCachedGroupMetadata !== false && !isStatus
 
+		// Convert nativeFlowMessage with single_select to direct listMessage (legacy format)
+		// This is required because WhatsApp expects listMessage format with biz > list node
+		// The viewOnceMessage > interactiveMessage > nativeFlowMessage wrapper causes error 479
+		// Reference: Pastorini sends as direct listMessage and it works on phone + web
+		const innerMsg = message.viewOnceMessage?.message
+		const nativeFlow = innerMsg?.interactiveMessage?.nativeFlowMessage
+		if (nativeFlow?.buttons?.length) {
+			const singleSelectBtn = nativeFlow.buttons.find(
+				(btn: any) => btn?.name === 'single_select'
+			)
+			if (singleSelectBtn?.buttonParamsJson) {
+				try {
+					const params = JSON.parse(singleSelectBtn.buttonParamsJson)
+					const sections = params.sections?.map((section: any) => ({
+						title: section.title,
+						rows: section.rows?.map((row: any) => ({
+							rowId: row.id || row.rowId,
+							title: row.title,
+							description: row.description || ''
+						}))
+					}))
+
+					if (sections?.length) {
+						// Build direct listMessage (legacy format that works)
+						const listMessage = proto.Message.ListMessage.fromObject({
+							title: innerMsg?.interactiveMessage?.header?.title || '',
+							description: innerMsg?.interactiveMessage?.body?.text || '',
+							buttonText: params.title || 'Menu',
+							footerText: innerMsg?.interactiveMessage?.footer?.text || '',
+							listType: proto.Message.ListMessage.ListType.SINGLE_SELECT,
+							sections
+						})
+
+						// Mutate message in-place: remove viewOnceMessage, add listMessage
+						delete message.viewOnceMessage
+						message.listMessage = listMessage
+						// Keep messageContextInfo if it was nested
+						if (!message.messageContextInfo && innerMsg?.messageContextInfo) {
+							message.messageContextInfo = innerMsg.messageContextInfo
+						}
+
+						logger.info(
+							{ msgId, sectionsCount: sections.length, buttonText: params.title },
+							'[LIST CONVERT] Converted nativeFlowMessage(single_select) to direct listMessage format'
+						)
+					}
+				} catch (err) {
+					logger.warn(
+						{ msgId, error: (err as Error).message },
+						'[LIST CONVERT] Failed to convert nativeFlowMessage to listMessage, sending as-is'
+					)
+				}
+			}
+		}
+
 		const participants: BinaryNode[] = []
 		const destinationJid = !isStatus ? finalJid : statusJid
 		const binaryNodeContent: BinaryNode[] = []
