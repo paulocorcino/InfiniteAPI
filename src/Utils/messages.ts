@@ -695,12 +695,104 @@ export const generateCarouselMessage = async (
  * await sock.sendMessage(jid, msg)
  * ```
  */
-export const generateListMessage = (options: ListMessageOptions): WAMessageContent => {
-	const { buttonText, sections, text, title, footer } = options
+// ========== List Message Limits (WhatsApp enforced) ==========
 
+const LIST_LIMITS = {
+	MAX_SECTIONS: 10,
+	MAX_ROWS_PER_SECTION: 10,
+	MAX_TOTAL_ROWS: 30,
+	MAX_SECTION_TITLE: 24,
+	MAX_ROW_TITLE: 24,
+	MAX_ROW_DESCRIPTION: 72,
+	MAX_ROW_ID: 200,
+	MAX_BUTTON_TEXT: 20,
+} as const
+
+/**
+ * Validates and sanitizes list message sections according to WhatsApp limits.
+ * Truncates strings that exceed max length, throws on structural violations.
+ */
+const validateListSections = (
+	sections: Array<{ title: string; rows: Array<{ id?: string; rowId?: string; title: string; description?: string }> }>,
+	buttonText?: string
+): void => {
 	if (!sections || sections.length === 0) {
 		throw new Boom('At least one section is required', { statusCode: 400 })
 	}
+
+	if (sections.length > LIST_LIMITS.MAX_SECTIONS) {
+		throw new Boom(
+			`Maximum ${LIST_LIMITS.MAX_SECTIONS} sections allowed, got ${sections.length}`,
+			{ statusCode: 400 }
+		)
+	}
+
+	if (buttonText && buttonText.length > LIST_LIMITS.MAX_BUTTON_TEXT) {
+		throw new Boom(
+			`buttonText max ${LIST_LIMITS.MAX_BUTTON_TEXT} characters, got ${buttonText.length}`,
+			{ statusCode: 400 }
+		)
+	}
+
+	let totalRows = 0
+	for (const section of sections) {
+		if (section.title && section.title.length > LIST_LIMITS.MAX_SECTION_TITLE) {
+			throw new Boom(
+				`Section title max ${LIST_LIMITS.MAX_SECTION_TITLE} characters, got ${section.title.length}: "${section.title}"`,
+				{ statusCode: 400 }
+			)
+		}
+
+		if (!section.rows || section.rows.length === 0) {
+			throw new Boom('Each section must have at least one row', { statusCode: 400 })
+		}
+
+		if (section.rows.length > LIST_LIMITS.MAX_ROWS_PER_SECTION) {
+			throw new Boom(
+				`Maximum ${LIST_LIMITS.MAX_ROWS_PER_SECTION} rows per section, got ${section.rows.length} in "${section.title}"`,
+				{ statusCode: 400 }
+			)
+		}
+
+		for (const row of section.rows) {
+			const rowId = row.id || row.rowId || ''
+			if (rowId.length > LIST_LIMITS.MAX_ROW_ID) {
+				throw new Boom(
+					`Row ID max ${LIST_LIMITS.MAX_ROW_ID} characters, got ${rowId.length}`,
+					{ statusCode: 400 }
+				)
+			}
+
+			if (row.title && row.title.length > LIST_LIMITS.MAX_ROW_TITLE) {
+				throw new Boom(
+					`Row title max ${LIST_LIMITS.MAX_ROW_TITLE} characters, got ${row.title.length}: "${row.title}"`,
+					{ statusCode: 400 }
+				)
+			}
+
+			if (row.description && row.description.length > LIST_LIMITS.MAX_ROW_DESCRIPTION) {
+				throw new Boom(
+					`Row description max ${LIST_LIMITS.MAX_ROW_DESCRIPTION} characters, got ${row.description.length}: "${row.description.substring(0, 30)}..."`,
+					{ statusCode: 400 }
+				)
+			}
+		}
+
+		totalRows += section.rows.length
+	}
+
+	if (totalRows > LIST_LIMITS.MAX_TOTAL_ROWS) {
+		throw new Boom(
+			`Maximum ${LIST_LIMITS.MAX_TOTAL_ROWS} total rows allowed, got ${totalRows}`,
+			{ statusCode: 400 }
+		)
+	}
+}
+
+export const generateListMessage = (options: ListMessageOptions): WAMessageContent => {
+	const { buttonText, sections, text, title, footer } = options
+
+	validateListSections(sections, buttonText)
 
 	// Build sections for single_select
 	const formattedSections = sections.map(section => ({
@@ -1014,6 +1106,8 @@ export const generateListMessageLegacy = (
 	buttonText: string,
 	footer?: string
 ): WAMessageContent => {
+	validateListSections(listInfo.sections, buttonText)
+
 	return {
 		listMessage: WAProto.Message.ListMessage.fromObject({
 			title,
@@ -1081,7 +1175,7 @@ export const generateWAMessageContent = async (
 		// Legacy format (listMessage) works on all platforms
 		const generated = generateListMessageLegacy(
 			{ sections: listMsg.nativeList.sections },
-			listMsg.title || listMsg.text || '',
+			listMsg.title || '',
 			listMsg.text || '',
 			listMsg.nativeList.buttonText,
 			listMsg.footer
@@ -1158,7 +1252,11 @@ export const generateWAMessageContent = async (
 		m.templateMessage = templateMessage
 		options.logger?.warn('[EXPERIMENTAL] Sending templateMessage - this may not work and can cause bans')
 	} else if (hasNonNullishProperty(message, 'sections')) {
-		// Process list messages
+		// Process list messages - validate limits
+		validateListSections(
+			(message as any).sections,
+			(message as any).buttonText
+		)
 		const listMessage: proto.Message.IListMessage = {
 			title: (message as any).title,
 			description: (message as any).text,
