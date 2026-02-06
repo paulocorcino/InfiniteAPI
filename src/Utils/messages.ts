@@ -1642,7 +1642,11 @@ export const generateWAMessageContent = async (
 		}
 	}
 
-	if (shouldIncludeReportingToken(m)) {
+	// Skip messageContextInfo for carousel messages
+	// Carousel sent as direct interactiveMessage doesn't need reporting token
+	// and messageContextInfo alongside interactiveMessage causes error 479 on linked devices
+	const isCarouselMsg = !!m.interactiveMessage?.carouselMessage
+	if (shouldIncludeReportingToken(m) && !isCarouselMsg) {
 		m.messageContextInfo = m.messageContextInfo || {}
 		if (!m.messageContextInfo.messageSecret) {
 			m.messageContextInfo.messageSecret = randomBytes(32)
