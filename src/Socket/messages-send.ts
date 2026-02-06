@@ -1163,6 +1163,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				const { user: mePnUser } = jidDecode(meId)!
 				const { user: meLidUser } = meLid ? jidDecode(meLid)! : { user: null }
 
+				// Detect carousel to skip own devices (they can't handle carousel in DSM wrapper)
+				const isCarouselForDSM = isCarouselMessage(message)
+
 				for (const { user, jid } of devices) {
 					const isExactSenderDevice = jid === meId || (meLid && jid === meLid)
 					if (isExactSenderDevice) {
@@ -1174,6 +1177,11 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					const isMe = user === mePnUser || user === meLidUser
 
 					if (isMe) {
+						// Skip own linked devices for carousel - they reject DSM-wrapped carousel with error 479
+						if (isCarouselForDSM) {
+							logger.debug({ jid }, '[CAROUSEL] Skipping own linked device - carousel DSM not supported')
+							continue
+						}
 						meRecipients.push(jid)
 					} else {
 						otherRecipients.push(jid)
@@ -1189,8 +1197,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					{ nodes: otherNodes, shouldIncludeDeviceIdentity: s2 }
 				] = await Promise.all([
 					// For own devices: use DSM if available (1:1 chats only)
+					// Skip for carousel - linked devices can't handle carousel in DSM wrapper (error 479)
 					createParticipantNodes(meRecipients, meMsg || message, extraAttrs),
-					createParticipantNodes(otherRecipients, message, extraAttrs, meMsg)
+					createParticipantNodes(otherRecipients, message, extraAttrs, isCarouselForDSM ? undefined : meMsg)
 				])
 				participants.push(...meNodes)
 				participants.push(...otherNodes)
@@ -1208,7 +1217,10 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				const isParticipantLid = isLidUser(participant!.jid)
 				const isMe = areJidsSameUser(participant!.jid, isParticipantLid ? meLid : meId)
 
-				const encodedMessageToSend = isMe
+				// Skip DSM for carousel retries to own devices - they can't handle it
+				const isCarouselRetry = isCarouselMessage(message)
+				const usesDSM = isMe && !isCarouselRetry
+				const encodedMessageToSend = usesDSM
 					? encodeWAMessage({
 							deviceSentMessage: {
 								destinationJid,
