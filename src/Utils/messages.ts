@@ -636,34 +636,30 @@ export const generateCarouselMessage = async (
 			body: { text: card.body || '' },
 			footer: card.footer ? { text: card.footer } : undefined,
 			nativeFlowMessage: {
-				buttons: card.buttons.map(formatNativeFlowButton),
-				messageParamsJson: JSON.stringify({}),
-				messageVersion: 1
+				buttons: card.buttons.map(formatNativeFlowButton)
 			}
 		}
 	}))
 
-	// Build the interactive message with carousel
+	// Build the interactive message with carousel (matching Pastorini structure)
 	const interactiveMessage: proto.Message.IInteractiveMessage = {
 		body: { text: text || '' },
 		footer: footer ? { text: footer } : undefined,
-		header: {
-			title: '',
-			subtitle: '',
-			hasMediaAttachment: false
-		},
 		carouselMessage: {
 			cards: carouselCards,
-			messageVersion: 1,
-			carouselCardType: 1  // HSCROLL_CARDS - required for Web/Desktop to render carousel cards
+			messageVersion: 1
 		}
 	}
 
-	// Return as direct interactiveMessage (no viewOnceMessage wrapper)
-	// viewOnceMessage causes error 479 rejection from linked devices (Web/Desktop)
-	// carouselCardType: 1 (HSCROLL_CARDS) tells Web how to render the cards
+	// Wrap in viewOnceMessage for WhatsApp Web/Desktop compatibility
+	// Without this wrapper, Web only renders header/body text
+	// Note: using minimal wrapper (no messageContextInfo) to avoid error 479
 	return {
-		interactiveMessage
+		viewOnceMessage: {
+			message: {
+				interactiveMessage
+			}
+		}
 	}
 }
 
@@ -1160,8 +1156,8 @@ export const generateWAMessageContent = async (
 		}
 		// Pass options for media processing if cards have images/videos
 		const generated = await generateCarouselMessage(carouselOptions, options)
-		m.interactiveMessage = generated.interactiveMessage
-		options.logger?.info('Sending carouselMessage with carouselCardType HSCROLL_CARDS')
+		m.viewOnceMessage = generated.viewOnceMessage
+		options.logger?.info('Sending carouselMessage with viewOnceMessage wrapper (no messageContextInfo)')
 	}
 	// Check for nativeList
 	else if (hasNonNullishProperty(message, 'nativeList')) {
