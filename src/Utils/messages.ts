@@ -637,7 +637,8 @@ export const generateCarouselMessage = async (
 			footer: card.footer ? { text: card.footer } : undefined,
 			nativeFlowMessage: {
 				buttons: card.buttons.map(formatNativeFlowButton),
-				messageParamsJson: ''
+				messageParamsJson: JSON.stringify({}),
+				messageVersion: 1
 			}
 		}
 	}))
