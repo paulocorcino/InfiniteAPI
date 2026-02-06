@@ -2717,7 +2717,6 @@ message Message {
             optional string title = 1;
             optional string subtitle = 2;
             optional bool hasMediaAttachment = 5;
-            optional bool hasSubtitle = 10;
             oneof media {
                 Message.DocumentMessage documentMessage = 3;
                 Message.ImageMessage imageMessage = 4;
