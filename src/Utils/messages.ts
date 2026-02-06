@@ -1081,7 +1081,7 @@ export const generateWAMessageContent = async (
 		// Legacy format (listMessage) works on all platforms
 		const generated = generateListMessageLegacy(
 			{ sections: listMsg.nativeList.sections },
-			listMsg.title || listMsg.text || '',
+			listMsg.title || '',
 			listMsg.text || '',
 			listMsg.nativeList.buttonText,
 			listMsg.footer
