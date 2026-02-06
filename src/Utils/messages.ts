@@ -658,11 +658,18 @@ export const generateCarouselMessage = async (
 		}
 	}
 
-	// Return interactiveMessage directly (NOT wrapped in viewOnceMessage)
-	// Carousels wrapped in viewOnceMessage cause error 479 rejection
-	// Pastorini sends carousel as direct interactiveMessage which works on all platforms
+	// Wrap in viewOnceMessage - required for WhatsApp Web/Desktop rendering
+	// Without this wrapper, Web only shows the header/body text
 	return {
-		interactiveMessage
+		viewOnceMessage: {
+			message: {
+				messageContextInfo: {
+					deviceListMetadata: {},
+					deviceListMetadataVersion: 2
+				},
+				interactiveMessage
+			}
+		}
 	}
 }
 
@@ -1159,8 +1166,8 @@ export const generateWAMessageContent = async (
 		}
 		// Pass options for media processing if cards have images/videos
 		const generated = await generateCarouselMessage(carouselOptions, options)
-		m.interactiveMessage = generated.interactiveMessage
-		options.logger?.info('Sending carouselMessage as direct interactiveMessage (no viewOnce wrapper)')
+		m.viewOnceMessage = generated.viewOnceMessage
+		options.logger?.info('Sending carouselMessage with viewOnceMessage wrapper')
 	}
 	// Check for nativeList
 	else if (hasNonNullishProperty(message, 'nativeList')) {
