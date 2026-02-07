@@ -610,6 +610,16 @@ export const generateCarouselMessage = async (
 		throw new Boom('mediaOptions required for processing card media', { statusCode: 400 })
 	}
 
+	// WhatsApp requires ALL carousel cards to have media attachments (image or video)
+	// Cards without media will not render on WhatsApp Web/Desktop
+	const cardsWithoutMedia = cards.filter(card => !card.image && !card.video)
+	if (cardsWithoutMedia.length > 0) {
+		mediaOptions?.logger?.warn(
+			{ cardsWithoutMedia: cardsWithoutMedia.length, totalCards: cards.length },
+			'[CAROUSEL] WARNING: Cards without media will NOT render on WhatsApp Web. Every card MUST have an image or video.'
+		)
+	}
+
 	// Map cards to the carousel format (processing media)
 	const carouselCards = await Promise.all(cards.map(async (card) => {
 		const hasMedia = !!(card.image || card.video)
@@ -652,6 +662,24 @@ export const generateCarouselMessage = async (
 			messageVersion: 1
 		}
 	}
+
+	// Log carousel structure summary for debugging
+	mediaOptions?.logger?.info(
+		{
+			totalCards: carouselCards.length,
+			cards: carouselCards.map((c: any, i: number) => ({
+				index: i,
+				hasMedia: c.header?.hasMediaAttachment,
+				mediaType: c.header?.imageMessage ? 'image' : c.header?.videoMessage ? 'video' : 'none',
+				hasBody: !!c.body?.text,
+				hasFooter: !!c.footer?.text,
+				buttonsCount: c.nativeFlowMessage?.buttons?.length || 0
+			})),
+			rootHeader: !!interactiveMessage.header?.title,
+			rootBody: !!interactiveMessage.body?.text
+		},
+		'[CAROUSEL] Structure summary'
+	)
 
 	// Wrap in viewOnceMessageV2 (NOT V1!) for WhatsApp Web/Desktop rendering
 	// V2 (field 55) is the stable wrapper for interactive messages from non-Cloud API accounts

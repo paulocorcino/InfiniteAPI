@@ -22,6 +22,17 @@ import { SenderKeyRecord } from './Group/sender-key-record'
 import { GroupCipher, GroupSessionBuilder, SenderKeyDistributionMessage } from './Group'
 import { LIDMappingStore } from './lid-mapping'
 
+// Suppress verbose "Closing session: SessionEntry {...}" logs from libsignal
+// These are raw console.log calls from the native Signal library that dump
+// cryptographic session details (keys, ratchets, etc.) on every encrypt/decrypt
+const _origConsoleLog = console.log
+console.log = function(...args: unknown[]) {
+	if (args.length > 0 && typeof args[0] === 'string' && args[0].startsWith('Closing session')) {
+		return // suppress libsignal session dump
+	}
+	_origConsoleLog.apply(console, args)
+}
+
 // ============================================
 // Identity Key Detection Constants
 // ============================================
