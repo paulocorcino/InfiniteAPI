@@ -1125,6 +1125,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				const { user: mePnUser } = jidDecode(meId)!
 				const { user: meLidUser } = meLid ? jidDecode(meLid)! : { user: null }
 
+				// Carousel in DSM wrapper causes error 479 on own devices
+				const isCarouselMsg = isCarouselMessage(message)
+
 				for (const { user, jid } of devices) {
 					const isExactSenderDevice = jid === meId || (meLid && jid === meLid)
 					if (isExactSenderDevice) {
@@ -1136,6 +1139,10 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					const isMe = user === mePnUser || user === meLidUser
 
 					if (isMe) {
+						if (isCarouselMsg) {
+							logger.debug({ jid }, '[CAROUSEL] Skipping own device - DSM carousel causes error 479')
+							continue
+						}
 						meRecipients.push(jid)
 					} else {
 						otherRecipients.push(jid)
@@ -1170,7 +1177,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				const isParticipantLid = isLidUser(participant!.jid)
 				const isMe = areJidsSameUser(participant!.jid, isParticipantLid ? meLid : meId)
 
-				const usesDSM = isMe
+				// Skip DSM for carousel - own devices reject it with error 479
+				const usesDSM = isMe && !isCarouselMessage(message)
 				const encodedMessageToSend = usesDSM
 					? encodeWAMessage({
 							deviceSentMessage: {
