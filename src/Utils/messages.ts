@@ -653,11 +653,20 @@ export const generateCarouselMessage = async (
 		}
 	}
 
-	// Return interactiveMessage directly (NOT wrapped in viewOnceMessage)
-	// Pastorini's working implementation confirms carousels must be sent
-	// as direct interactiveMessage, not wrapped in viewOnceMessage
+	// Wrap in viewOnceMessageV2 (NOT V1!) for WhatsApp Web/Desktop rendering
+	// V2 (field 55) is the stable wrapper for interactive messages from non-Cloud API accounts
+	// V1 (field 37) caused error 479 - V2 is the correct approach (confirmed by Z-API)
+	// messageContextInfo with deviceListMetadata is required for multi-device rendering
 	return {
-		interactiveMessage
+		viewOnceMessageV2: {
+			message: {
+				messageContextInfo: {
+					deviceListMetadata: {},
+					deviceListMetadataVersion: 2
+				},
+				interactiveMessage
+			}
+		}
 	}
 }
 
@@ -1154,8 +1163,8 @@ export const generateWAMessageContent = async (
 		}
 		// Pass options for media processing if cards have images/videos
 		const generated = await generateCarouselMessage(carouselOptions, options)
-		m.interactiveMessage = generated.interactiveMessage
-		options.logger?.info('Sending carousel as direct interactiveMessage (plain object, no proto conversion)')
+		m.viewOnceMessageV2 = generated.viewOnceMessageV2
+		options.logger?.info('Sending carousel with viewOnceMessageV2 wrapper (plain object, no proto conversion)')
 		// Return the plain JS object directly WITHOUT calling WAProto.Message.fromObject()
 		// This matches Pastorini's working approach where plain objects are passed directly
 		// to relayMessage. The fromObject() conversion can corrupt nested carousel structures

@@ -574,7 +574,11 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 						// Debug: log per-device carousel encoding
 					const carouselInMsg = msgToEncrypt?.viewOnceMessage?.message?.interactiveMessage?.carouselMessage
+						|| msgToEncrypt?.viewOnceMessageV2?.message?.interactiveMessage?.carouselMessage
+						|| msgToEncrypt?.interactiveMessage?.carouselMessage
 						|| msgToEncrypt?.deviceSentMessage?.message?.viewOnceMessage?.message?.interactiveMessage?.carouselMessage
+						|| msgToEncrypt?.deviceSentMessage?.message?.viewOnceMessageV2?.message?.interactiveMessage?.carouselMessage
+						|| msgToEncrypt?.deviceSentMessage?.message?.interactiveMessage?.carouselMessage
 					if (carouselInMsg) {
 						try {
 							const debugBytes = proto.Message.encode(proto.Message.fromObject(msgToEncrypt)).finish()
@@ -683,9 +687,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			return 'interactive'
 		}
 
-		// Check inside viewOnceMessage wrapper (modern nativeFlowMessage format)
-		// This is the recommended format for interactive messages
-		const innerMessage = message.viewOnceMessage?.message
+		// Check inside viewOnceMessage/viewOnceMessageV2 wrapper (modern nativeFlowMessage format)
+		// V2 is the recommended format for interactive messages (carousel, buttons)
+		const innerMessage = message.viewOnceMessage?.message || message.viewOnceMessageV2?.message
 		if (innerMessage) {
 			if (innerMessage.buttonsMessage) {
 				return 'buttons'
@@ -740,7 +744,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		// For native_flow messages, check for special button types that need specific attributes
 		if (buttonType === 'native_flow') {
 			const interactiveMsg = message.interactiveMessage ||
-				message.viewOnceMessage?.message?.interactiveMessage
+				message.viewOnceMessage?.message?.interactiveMessage ||
+				message.viewOnceMessageV2?.message?.interactiveMessage
 
 			if (interactiveMsg?.nativeFlowMessage?.buttons?.[0]) {
 				const firstButtonName = interactiveMsg.nativeFlowMessage.buttons[0].name
@@ -770,7 +775,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 	 */
 	const isCarouselMessage = (message: proto.IMessage): boolean => {
 		const interactiveMsg = message.interactiveMessage ||
-			message.viewOnceMessage?.message?.interactiveMessage
+			message.viewOnceMessage?.message?.interactiveMessage ||
+			message.viewOnceMessageV2?.message?.interactiveMessage
 
 		if (interactiveMsg?.carouselMessage?.cards?.length) {
 			return true
@@ -785,7 +791,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 	 */
 	const isCatalogMessage = (message: proto.IMessage): boolean => {
 		const interactiveMsg = message.interactiveMessage ||
-			message.viewOnceMessage?.message?.interactiveMessage
+			message.viewOnceMessage?.message?.interactiveMessage ||
+			message.viewOnceMessageV2?.message?.interactiveMessage
 
 		const nativeFlow = interactiveMsg?.nativeFlowMessage
 		if (nativeFlow?.buttons?.length) {
@@ -806,7 +813,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 	 */
 	const isListNativeFlow = (message: proto.IMessage): boolean => {
 		const interactiveMsg = message.interactiveMessage ||
-			message.viewOnceMessage?.message?.interactiveMessage
+			message.viewOnceMessage?.message?.interactiveMessage ||
+			message.viewOnceMessageV2?.message?.interactiveMessage
 
 		const nativeFlow = interactiveMsg?.nativeFlowMessage
 		if (nativeFlow?.buttons?.length) {
@@ -1284,8 +1292,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				const startTime = Date.now()
 
 				// Debug: Log message structure to diagnose list detection
-				const interactiveMsg = message.interactiveMessage || message.viewOnceMessage?.message?.interactiveMessage
-				const listMsg = message.listMessage || message.viewOnceMessage?.message?.listMessage
+				const interactiveMsg = message.interactiveMessage || message.viewOnceMessage?.message?.interactiveMessage || message.viewOnceMessageV2?.message?.interactiveMessage
+				const listMsg = message.listMessage || message.viewOnceMessage?.message?.listMessage || message.viewOnceMessageV2?.message?.listMessage
 				const nativeFlowButtons = interactiveMsg?.nativeFlowMessage?.buttons || []
 				const isListDetected = isListNativeFlow(message)
 
