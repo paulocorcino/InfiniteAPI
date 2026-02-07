@@ -1164,6 +1164,9 @@ export const generateWAMessageContent = async (
 		// Pass options for media processing if cards have images/videos
 		const generated = await generateCarouselMessage(carouselOptions, options)
 		m.viewOnceMessageV2 = generated.viewOnceMessageV2
+		// messageContextInfo at the OUTER Message level too (not just inside the V2 wrapper)
+		// This ensures meMsg/DSM and multi-device routing get proper device list metadata
+		m.messageContextInfo = { deviceListMetadata: {}, deviceListMetadataVersion: 2 }
 		options.logger?.info('Sending carousel with viewOnceMessageV2 wrapper (plain object, no proto conversion)')
 		// Return the plain JS object directly WITHOUT calling WAProto.Message.fromObject()
 		// This matches Pastorini's working approach where plain objects are passed directly
