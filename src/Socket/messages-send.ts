@@ -572,30 +572,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						}
 					}
 
-						// Debug: log per-device carousel encoding
-					const carouselInMsg = msgToEncrypt?.viewOnceMessage?.message?.interactiveMessage?.carouselMessage
-						|| msgToEncrypt?.viewOnceMessageV2?.message?.interactiveMessage?.carouselMessage
-						|| msgToEncrypt?.interactiveMessage?.carouselMessage
-						|| msgToEncrypt?.deviceSentMessage?.message?.viewOnceMessage?.message?.interactiveMessage?.carouselMessage
-						|| msgToEncrypt?.deviceSentMessage?.message?.viewOnceMessageV2?.message?.interactiveMessage?.carouselMessage
-						|| msgToEncrypt?.deviceSentMessage?.message?.interactiveMessage?.carouselMessage
-					if (carouselInMsg) {
-						try {
-							const debugBytes = proto.Message.encode(proto.Message.fromObject(msgToEncrypt)).finish()
-							logger.info(
-								{
-									recipientJid: jid,
-									isDSM: !!msgToEncrypt?.deviceSentMessage,
-									encodedBase64: Buffer.from(debugBytes).toString('base64'),
-									encodedLength: debugBytes.length,
-								},
-								'[CAROUSEL DEBUG] Per-device encoded message'
-							)
-						} catch (err) {
-							logger.warn({ jid, error: (err as Error).message }, '[CAROUSEL DEBUG] Per-device encode failed')
-						}
-					}
-
 					const bytes = encodeWAMessage(msgToEncrypt)
 					const mutexKey = jid
 
@@ -925,28 +901,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				message
 			},
 			messageContextInfo: message.messageContextInfo
-		}
-
-		// Debug logging for carousel messages - dump encoded bytes for binary comparison
-		if (isCarouselMessage(message)) {
-			try {
-				const msgBytes = proto.Message.encode(proto.Message.fromObject(message)).finish()
-				const meMsgBytes = proto.Message.encode(proto.Message.fromObject(meMsg)).finish()
-				logger.info(
-					{
-						msgId,
-						messageBase64: Buffer.from(msgBytes).toString('base64'),
-						meMsgBase64: Buffer.from(meMsgBytes).toString('base64'),
-						messageBytesLength: msgBytes.length,
-						meMsgBytesLength: meMsgBytes.length,
-						messageStructure: JSON.stringify(proto.Message.toObject(proto.Message.fromObject(message), { defaults: false })),
-						meMsgStructure: JSON.stringify(proto.Message.toObject(proto.Message.fromObject(meMsg), { defaults: false })),
-					},
-					'[CAROUSEL DEBUG] Encoded message bytes for binary comparison'
-				)
-			} catch (err) {
-				logger.warn({ msgId, error: (err as Error).message }, '[CAROUSEL DEBUG] Failed to encode for debug')
-			}
 		}
 
 		const extraAttrs: BinaryNodeAttributes = {}
