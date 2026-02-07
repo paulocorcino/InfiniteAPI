@@ -651,15 +651,15 @@ export const generateCarouselMessage = async (
 	}))
 
 	// Build the interactive message with carousel
-	// Root header MUST always be present for carousel messages (WhatsApp MD requirement)
-	// Missing root header causes error 479 on some devices
+	// Match ckptw's working structure: NO root header, NO messageVersion
+	// Root header is NOT used for carousel (only individual cards have headers)
+	// Previous assumption that root header was required was incorrect -
+	// the error 479 was caused by fromObject() corruption, not missing header
 	const interactiveMessage: proto.Message.IInteractiveMessage = {
-		header: { title: text || '', hasMediaAttachment: false },
 		body: { text: text || '' },
 		footer: footer ? { text: footer } : undefined,
 		carouselMessage: {
-			cards: carouselCards,
-			messageVersion: 1
+			cards: carouselCards
 		}
 	}
 
@@ -675,18 +675,18 @@ export const generateCarouselMessage = async (
 				hasFooter: !!c.footer?.text,
 				buttonsCount: c.nativeFlowMessage?.buttons?.length || 0
 			})),
-			rootHeader: !!interactiveMessage.header?.title,
 			rootBody: !!interactiveMessage.body?.text
 		},
 		'[CAROUSEL] Structure summary'
 	)
 
-	// Wrap in viewOnceMessageV2 (NOT V1!) for WhatsApp Web/Desktop rendering
-	// V2 (field 55) is the stable wrapper for interactive messages from non-Cloud API accounts
-	// V1 (field 37) caused error 479 - V2 is the correct approach (confirmed by Z-API)
-	// messageContextInfo with deviceListMetadata is required for multi-device rendering
+	// Wrap in viewOnceMessage V1 (field 37) - used by ckptw, Vkazee, and most Baileys forks
+	// V2 (field 55) renders on mobile but NOT on WhatsApp Web/Desktop
+	// V1 is what WhatsApp Web expects for interactive messages
+	// Previous error 479 with V1 was caused by fromObject() corruption, not missing header
+	// Now fixed: plain JS object (no fromObject), no root header, messageContextInfo included
 	return {
-		viewOnceMessageV2: {
+		viewOnceMessage: {
 			message: {
 				messageContextInfo: {
 					deviceListMetadata: {},
@@ -1191,11 +1191,11 @@ export const generateWAMessageContent = async (
 		}
 		// Pass options for media processing if cards have images/videos
 		const generated = await generateCarouselMessage(carouselOptions, options)
-		m.viewOnceMessageV2 = generated.viewOnceMessageV2
-		// messageContextInfo at the OUTER Message level too (not just inside the V2 wrapper)
+		m.viewOnceMessage = generated.viewOnceMessage
+		// messageContextInfo at the OUTER Message level too (not just inside the wrapper)
 		// This ensures meMsg/DSM and multi-device routing get proper device list metadata
 		m.messageContextInfo = { deviceListMetadata: {}, deviceListMetadataVersion: 2 }
-		options.logger?.info('Sending carousel with viewOnceMessageV2 wrapper (plain object, no proto conversion)')
+		options.logger?.info('Sending carousel with viewOnceMessage V1 wrapper (plain object, no proto conversion)')
 		// Return the plain JS object directly WITHOUT calling WAProto.Message.fromObject()
 		// This matches Pastorini's working approach where plain objects are passed directly
 		// to relayMessage. The fromObject() conversion can corrupt nested carousel structures
