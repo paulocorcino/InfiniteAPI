@@ -651,15 +651,15 @@ export const generateCarouselMessage = async (
 	}))
 
 	// Build the interactive message with carousel
-	// Root header MUST always be present for carousel messages (WhatsApp MD requirement)
-	// Missing root header causes error 479 on some devices
+	// Match ckptw's working structure: NO root header, NO messageVersion
+	// Root header is NOT used for carousel (only individual cards have headers)
+	// Previous assumption that root header was required was incorrect -
+	// the error 479 was caused by fromObject() corruption, not missing header
 	const interactiveMessage: proto.Message.IInteractiveMessage = {
-		header: { title: text || '', hasMediaAttachment: false },
 		body: { text: text || '' },
 		footer: footer ? { text: footer } : undefined,
 		carouselMessage: {
-			cards: carouselCards,
-			messageVersion: 1
+			cards: carouselCards
 		}
 	}
 
@@ -675,7 +675,6 @@ export const generateCarouselMessage = async (
 				hasFooter: !!c.footer?.text,
 				buttonsCount: c.nativeFlowMessage?.buttons?.length || 0
 			})),
-			rootHeader: !!interactiveMessage.header?.title,
 			rootBody: !!interactiveMessage.body?.text
 		},
 		'[CAROUSEL] Structure summary'
@@ -684,8 +683,8 @@ export const generateCarouselMessage = async (
 	// Wrap in viewOnceMessage V1 (field 37) - used by ckptw, Vkazee, and most Baileys forks
 	// V2 (field 55) renders on mobile but NOT on WhatsApp Web/Desktop
 	// V1 is what WhatsApp Web expects for interactive messages
-	// Previous error 479 with V1 was caused by missing root header + fromObject() corruption
-	// Now fixed: root header always present, plain JS object, messageContextInfo included
+	// Previous error 479 with V1 was caused by fromObject() corruption, not missing header
+	// Now fixed: plain JS object (no fromObject), no root header, messageContextInfo included
 	return {
 		viewOnceMessage: {
 			message: {
