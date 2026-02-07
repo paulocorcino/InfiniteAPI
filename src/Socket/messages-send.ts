@@ -2020,12 +2020,16 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 			const userJid = authState.creds.me!.id
 
-			// Special path for carousel: call relayMessage directly
-			// This bypasses generateWAMessageFromContent (which adds contextInfo.expiration
-			// and calls WAProto.Message.create that may corrupt nested carousel structures)
-			// Matches the working implementation's approach: generateWAMessageContent → relayMessage
+			// Special path for carousel: call relayMessage directly with plain JS object
+			// This matches Pastorini's working approach:
+			// 1. Build message as plain JS object (not proto instance)
+			// 2. Pass directly to relayMessage (no WAProto.Message.fromObject/create)
+			// 3. protobuf encode() handles plain objects correctly during serialization
+			// Going through fromObject() can corrupt nested carousel InteractiveMessage oneOf fields
 			if (typeof content === 'object' && 'nativeCarousel' in content && (content as any).nativeCarousel) {
 				const messageId = generateMessageIDV2(sock.user?.id)
+				// generateWAMessageContent returns a plain JS object for carousel
+				// (not a proto instance) to preserve nested structure integrity
 				const msgContent = await generateWAMessageContent(content, {
 					logger,
 					upload: waUploadToServer,
@@ -2034,6 +2038,17 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					jid,
 				})
 
+				// Pass the plain JS object directly to relayMessage
+				// This avoids proto.WebMessageInfo.fromObject() which would call
+				// Message.fromObject() on the nested message, potentially corrupting it
+				await relayMessage(jid, msgContent, {
+					messageId,
+					useCachedGroupMetadata: options.useCachedGroupMetadata,
+					additionalAttributes: {},
+					statusJidList: options.statusJidList,
+				})
+
+				// Build WebMessageInfo only for event emission and return value
 				const timestamp = unixTimestampSeconds()
 				const fullMsg = proto.WebMessageInfo.fromObject({
 					key: {
@@ -2047,13 +2062,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					participant: isJidGroup(jid) ? userJid : undefined,
 					status: proto.WebMessageInfo.Status.PENDING
 				}) as WAMessage
-
-				await relayMessage(jid, fullMsg.message!, {
-					messageId: fullMsg.key.id!,
-					useCachedGroupMetadata: options.useCachedGroupMetadata,
-					additionalAttributes: {},
-					statusJidList: options.statusJidList,
-				})
 
 				if (config.emitOwnEvents) {
 					process.nextTick(async () => {

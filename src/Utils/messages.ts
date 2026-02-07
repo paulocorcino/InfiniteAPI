@@ -641,8 +641,10 @@ export const generateCarouselMessage = async (
 	}))
 
 	// Build the interactive message with carousel
+	// Root header MUST always be present for carousel messages (WhatsApp MD requirement)
+	// Missing root header causes error 479 on some devices
 	const interactiveMessage: proto.Message.IInteractiveMessage = {
-		header: text ? { title: text } : undefined,
+		header: { title: text || '', hasMediaAttachment: false },
 		body: { text: text || '' },
 		footer: footer ? { text: footer } : undefined,
 		carouselMessage: {
@@ -1156,12 +1158,13 @@ export const generateWAMessageContent = async (
 		// Pass options for media processing if cards have images/videos
 		const generated = await generateCarouselMessage(carouselOptions, options)
 		m.viewOnceMessage = generated.viewOnceMessage
-		options.logger?.info('Sending carousel with viewOnceMessage wrapper + fromObject encoding')
-		// Return early with fromObject for proper deep conversion of nested carousel structure
-		// fromObject recursively converts nested plain objects to protobuf message instances
-		// whereas create() does shallow property copy which may not properly encode deep structures
-		// This matches the working implementation's encoding approach
-		return WAProto.Message.fromObject(m)
+		options.logger?.info('Sending carousel with viewOnceMessage wrapper (plain object, no proto conversion)')
+		// Return the plain JS object directly WITHOUT calling WAProto.Message.fromObject()
+		// This matches Pastorini's working approach where plain objects are passed directly
+		// to relayMessage. The fromObject() conversion can corrupt nested carousel structures
+		// by incorrectly handling oneOf fields in deeply nested InteractiveMessage cards.
+		// The protobuf encode() method handles plain objects correctly when serializing.
+		return m as WAMessageContent
 	}
 	// Check for nativeList
 	else if (hasNonNullishProperty(message, 'nativeList')) {
