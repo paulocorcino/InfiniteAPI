@@ -653,14 +653,11 @@ export const generateCarouselMessage = async (
 		}
 	}
 
-	// Wrap in viewOnceMessage for MD (multi-device) compatibility
-	// This ensures Web/Desktop clients can render the carousel
+	// Return interactiveMessage directly (NOT wrapped in viewOnceMessage)
+	// Pastorini's working implementation confirms carousels must be sent
+	// as direct interactiveMessage, not wrapped in viewOnceMessage
 	return {
-		viewOnceMessage: {
-			message: {
-				interactiveMessage
-			}
-		}
+		interactiveMessage
 	}
 }
 
@@ -1157,8 +1154,8 @@ export const generateWAMessageContent = async (
 		}
 		// Pass options for media processing if cards have images/videos
 		const generated = await generateCarouselMessage(carouselOptions, options)
-		m.viewOnceMessage = generated.viewOnceMessage
-		options.logger?.info('Sending carousel with viewOnceMessage wrapper (plain object, no proto conversion)')
+		m.interactiveMessage = generated.interactiveMessage
+		options.logger?.info('Sending carousel as direct interactiveMessage (plain object, no proto conversion)')
 		// Return the plain JS object directly WITHOUT calling WAProto.Message.fromObject()
 		// This matches Pastorini's working approach where plain objects are passed directly
 		// to relayMessage. The fromObject() conversion can corrupt nested carousel structures
