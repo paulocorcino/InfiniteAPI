@@ -288,7 +288,7 @@ export const prepareWAMessageMedia = async (
 					logger?.debug('computed backgroundColor audio status')
 				}
 			} catch (error) {
-				logger?.warn({ trace: (error as any).stack }, 'failed to obtain extra info')
+				logger?.warn({ trace: error instanceof Error ? error.stack : String(error) }, 'failed to obtain extra info')
 			}
 		})()
 	]).finally(async () => {
@@ -390,8 +390,8 @@ export const hasNonNullishProperty = <K extends PropertyKey>(
 		typeof message === 'object' &&
 		message !== null &&
 		key in message &&
-		(message as any)[key] !== null &&
-		(message as any)[key] !== undefined
+		(message as Record<PropertyKey, unknown>)[key] !== null &&
+		(message as Record<PropertyKey, unknown>)[key] !== undefined
 	)
 }
 
@@ -1153,7 +1153,7 @@ export const generateListMessageLegacy = (
 }
 
 function hasOptionalProperty<T, K extends PropertyKey>(obj: T, key: K): obj is WithKey<T, K> {
-	return typeof obj === 'object' && obj !== null && key in obj && (obj as any)[key] !== null
+	return typeof obj === 'object' && obj !== null && key in obj && (obj as Record<PropertyKey, unknown>)[key] !== null
 }
 
 export const generateWAMessageContent = async (
@@ -2034,7 +2034,7 @@ export function getAggregateResponsesInEventMessage(
 	}
 
 	for (const update of eventResponses || []) {
-		const responseType = (update as any).eventResponse || 'UNKNOWN'
+		const responseType = (update as unknown as { eventResponse?: string }).eventResponse || 'UNKNOWN'
 		if (responseType !== 'UNKNOWN' && responseMap[responseType]) {
 			responseMap[responseType].responders.push(getKeyAuthor(update.eventResponseMessageKey, meId))
 		}
