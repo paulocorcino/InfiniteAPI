@@ -123,9 +123,9 @@ export const makeNoiseHandler = ({
 
 	const mixIntoKey = (data: Uint8Array) => {
 		const [write, read] = localHKDF(data)
-		salt = write as Buffer
-		encKey = read as Buffer
-		decKey = read as Buffer
+		salt = Buffer.from(write)
+		encKey = Buffer.from(read)
+		decKey = Buffer.from(read)
 		counter = 0
 	}
 

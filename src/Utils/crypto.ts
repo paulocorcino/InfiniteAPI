@@ -100,7 +100,7 @@ export function aesEncrypt(buffer: Buffer | Uint8Array, key: Uint8Array) {
 }
 
 // encrypt AES 256 CBC with a given IV
-export function aesEncrypWithIV(buffer: Buffer, key: Buffer, IV: Buffer) {
+export function aesEncrypWithIV(buffer: Buffer | Uint8Array, key: Uint8Array, IV: Uint8Array) {
 	const aes = createCipheriv('aes-256-cbc', key, IV)
 	return Buffer.concat([aes.update(buffer), aes.final()]) // prefix IV to the buffer
 }
