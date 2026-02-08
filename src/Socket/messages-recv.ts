@@ -156,16 +156,16 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			throw new Boom('Not authenticated')
 		}
 
-		if (await placeholderResendCache.get(messageKey?.id!)) {
+		if (await placeholderResendCache.get(messageKey?.id)) {
 			logger.debug({ messageKey }, 'already requested resend')
 			return
 		} else {
-			await placeholderResendCache.set(messageKey?.id!, true)
+			await placeholderResendCache.set(messageKey?.id, true)
 		}
 
 		await delay(2000)
 
-		if (!(await placeholderResendCache.get(messageKey?.id!))) {
+		if (!(await placeholderResendCache.get(messageKey?.id))) {
 			logger.debug({ messageKey }, 'message received while resend requested')
 			return 'RESOLVED'
 		}
@@ -180,9 +180,9 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		}
 
 		setTimeout(async () => {
-			if (await placeholderResendCache.get(messageKey?.id!)) {
+			if (await placeholderResendCache.get(messageKey?.id)) {
 				logger.debug({ messageKey }, 'PDO message without response after 8 seconds. Phone possibly offline')
-				await placeholderResendCache.del(messageKey?.id!)
+				await placeholderResendCache.del(messageKey?.id)
 			}
 		}, 8_000)
 
@@ -233,7 +233,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					if (update.jid && update.user) {
 						ev.emit('newsletter-participants.update', {
 							id: update.jid,
-							author: node.attrs.from!,
+							author: node.attrs.from ?? '',
 							user: update.user,
 							new_role: 'ADMIN',
 							action: 'promote'
@@ -251,9 +251,10 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 	// Handles newsletter notifications
 	const handleNewsletterNotification = async (node: BinaryNode) => {
-		const from = node.attrs.from!
-		const child = getAllBinaryNodeChildren(node)[0]!
-		const author = node.attrs.participant!
+		const from = node.attrs.from ?? ''
+		const child = getAllBinaryNodeChildren(node)[0]
+		if (!child) return
+		const author = node.attrs.participant ?? ''
 
 		logger.info({ from, child }, 'got newsletter notification')
 
@@ -261,7 +262,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			case 'reaction':
 				const reactionUpdate = {
 					id: from,
-					server_id: child.attrs.message_id!,
+					server_id: child.attrs.message_id ?? '',
 					reaction: {
 						code: getBinaryNodeChildString(child, 'reaction'),
 						count: 1

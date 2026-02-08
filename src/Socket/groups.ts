@@ -316,19 +316,19 @@ export const extractGroupMetadata = (result: BinaryNode) => {
 		descId = descChild.attrs.id
 	}
 
-	const groupId = group.attrs.id!.includes('@') ? group.attrs.id : jidEncode(group.attrs.id!, 'g.us')
+	const groupId = (group.attrs.id ?? '').includes('@') ? group.attrs.id : jidEncode(group.attrs.id ?? '', 'g.us')
 	const eph = getBinaryNodeChild(group, 'ephemeral')?.attrs.expiration
 	const memberAddMode = getBinaryNodeChildString(group, 'member_add_mode') === 'all_member_add'
 	const metadata: GroupMetadata = {
-		id: groupId!,
+		id: groupId,
 		notify: group.attrs.notify,
 		addressingMode: group.attrs.addressing_mode === 'lid' ? WAMessageAddressingMode.LID : WAMessageAddressingMode.PN,
-		subject: group.attrs.subject!,
+		subject: group.attrs.subject ?? '',
 		subjectOwner: group.attrs.s_o,
 		subjectOwnerPn: group.attrs.s_o_pn,
-		subjectTime: +group.attrs.s_t!,
+		subjectTime: +group.attrs.s_t ?? '0',
 		size: group.attrs.size ? +group.attrs.size : getBinaryNodeChildren(group, 'participant').length,
-		creation: +group.attrs.creation!,
+		creation: +group.attrs.creation ?? '0',
 		owner: group.attrs.creator ? jidNormalizedUser(group.attrs.creator) : undefined,
 		ownerPn: group.attrs.creator_pn ? jidNormalizedUser(group.attrs.creator_pn) : undefined,
 		owner_country_code: group.attrs.creator_country_code,
@@ -347,7 +347,7 @@ export const extractGroupMetadata = (result: BinaryNode) => {
 		participants: getBinaryNodeChildren(group, 'participant').map(({ attrs }) => {
 			// TODO: Store LID MAPPINGS
 			return {
-				id: attrs.jid!,
+				id: attrs.jid ?? '',
 				phoneNumber: isLidUser(attrs.jid) && isPnUser(attrs.phone_number) ? attrs.phone_number : undefined,
 				lid: isPnUser(attrs.jid) && isLidUser(attrs.lid) ? attrs.lid : undefined,
 				admin: (attrs.type || null) as GroupParticipant['admin']
