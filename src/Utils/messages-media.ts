@@ -317,7 +317,7 @@ export const getStream = async (item: WAMediaUpload, opts?: RequestInit & { maxC
 	const urlStr = item.url.toString()
 
 	if (urlStr.startsWith('data:')) {
-		const buffer = Buffer.from(urlStr.split(',')[1] ?? '', 'base64')
+		const buffer = Buffer.from(urlStr.split(',')[1]!, 'base64')
 		return { stream: toReadable(buffer), type: 'buffer' } as const
 	}
 
@@ -532,7 +532,7 @@ export const downloadContentFromMessage = async (
 	opts: MediaDownloadOptions = {}
 ) => {
 	const isValidMediaUrl = url?.startsWith('https://mmg.whatsapp.net/')
-	const downloadUrl = isValidMediaUrl ? url : getUrlFromDirectPath(directPath ?? '')
+	const downloadUrl = isValidMediaUrl ? url : getUrlFromDirectPath(directPath!)
 	if (!downloadUrl) {
 		throw new Boom('No valid media URL or directPath present in message', { statusCode: 400 })
 	}
@@ -656,7 +656,7 @@ export function extensionForMediaMessage(message: WAMessageContent) {
 		extension = '.jpeg'
 	} else {
 		const messageContent = message[type] as WAGenericMediaMessage
-		extension = getExtension(messageContent.mimetype ?? '') ?? ''
+		extension = getExtension(messageContent.mimetype!)!
 	}
 
 	return extension
@@ -864,8 +864,8 @@ export const getWAUploadToServer = (
 
 				if (result?.url || result?.direct_path) {
 					urls = {
-						mediaUrl: result.url ?? '',
-						directPath: result.direct_path ?? '',
+						mediaUrl: result.url!,
+						directPath: result.direct_path!,
 						meta_hmac: result.meta_hmac,
 						fbid: result.fbid,
 						ts: result.ts

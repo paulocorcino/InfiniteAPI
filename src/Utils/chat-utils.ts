@@ -470,7 +470,7 @@ export const decodeSyncdSnapshot = async (
 		areMutationsRequired
 			? mutation => {
 					const index = mutation.syncAction.index?.toString()
-					mutationMap[index ?? ''] = mutation
+					mutationMap[index!] = mutation
 				}
 			: () => {},
 		validateMacs
@@ -558,7 +558,7 @@ export const decodePatches = async (
 			shouldMutate
 				? mutation => {
 						const index = mutation.syncAction.index?.toString()
-						mutationMap[index ?? ''] = mutation
+						mutationMap[index!] = mutation
 					}
 				: () => {},
 			true
@@ -689,7 +689,7 @@ export const chatModificationToAppPatch = (mod: ChatModification, jid: string) =
 					messageTimestamp: timestamp
 				}
 			},
-			index: ['deleteMessageForMe', jid, key.id ?? '', key.fromMe ? '1' : '0', '0'],
+			index: ['deleteMessageForMe', jid, key.id!, key.fromMe ? '1' : '0', '0'],
 			type: 'regular_high',
 			apiVersion: 3,
 			operation: OP.SET
@@ -896,7 +896,7 @@ export const processSyncAction = (
 			{
 				id,
 				muteEndTime: action.muteAction?.muted ? toNumber(action.muteAction.muteEndTimestamp) : null,
-				conditional: getChatUpdateConditional(id ?? '', undefined)
+				conditional: getChatUpdateConditional(id!, undefined)
 			}
 		])
 	} else if (action?.archiveChatAction || type === 'archive' || type === 'unarchive') {
@@ -925,7 +925,7 @@ export const processSyncAction = (
 			{
 				id,
 				archived: isArchived,
-				conditional: getChatUpdateConditional(id ?? '', msgRange)
+				conditional: getChatUpdateConditional(id!, msgRange)
 			}
 		])
 	} else if (action?.markChatAsReadAction) {
@@ -939,7 +939,7 @@ export const processSyncAction = (
 			{
 				id,
 				unreadCount: isNullUpdate ? null : !!markReadAction?.read ? 0 : -1,
-				conditional: getChatUpdateConditional(id ?? '', markReadAction?.messageRange)
+				conditional: getChatUpdateConditional(id!, markReadAction?.messageRange)
 			}
 		])
 	} else if (action?.deleteMessageForMeAction || type === 'deleteMessageForMe') {
@@ -965,7 +965,7 @@ export const processSyncAction = (
 			{
 				id,
 				pinned: action.pinAction?.pinned ? toNumber(action.timestamp) : null,
-				conditional: getChatUpdateConditional(id ?? '', undefined)
+				conditional: getChatUpdateConditional(id!, undefined)
 			}
 		])
 	} else if (action?.unarchiveChatsSetting) {
@@ -990,7 +990,7 @@ export const processSyncAction = (
 		])
 	} else if (action?.deleteChatAction || type === 'deleteChat') {
 		if (!isInitialSync) {
-			ev.emit('chats.delete', [id ?? ''])
+			ev.emit('chats.delete', [id!])
 		}
 	} else if (action?.labelEditAction) {
 		const { name, color, deleted, predefinedId } = action.labelEditAction

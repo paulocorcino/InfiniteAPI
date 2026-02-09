@@ -324,7 +324,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 								fromMe: false // TODO: is this really true though
 							},
 							message: messageProto,
-							messageTimestamp: +(child.attrs.t ?? 0)
+							messageTimestamp: +child.attrs.t!
 						}).toJSON() as WAMessage
 						await upsertMessage(fullMessage, 'append')
 						logger.info('Processed plaintext newsletter message')
@@ -601,8 +601,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		const actingParticipantLid = fullNode.attrs.participant
 		const actingParticipantPn = fullNode.attrs.participant_pn
 
-		const affectedParticipantLid = getBinaryNodeChild(child, 'participant')?.attrs?.jid || actingParticipantLid || ''
-		const affectedParticipantPn = getBinaryNodeChild(child, 'participant')?.attrs?.phone_number || actingParticipantPn || ''
+		const affectedParticipantLid = getBinaryNodeChild(child, 'participant')?.attrs?.jid || actingParticipantLid!
+		const affectedParticipantPn = getBinaryNodeChild(child, 'participant')?.attrs?.phone_number || actingParticipantPn!
 
 		switch (child?.tag) {
 			case 'create':
@@ -663,8 +663,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					participants.length === 1 &&
 					// if recv. "remove" message and sender removed themselves
 					// mark as left
-					(areJidsSameUser(participants[0]?.id, actingParticipantLid) ||
-						areJidsSameUser(participants[0]?.id, actingParticipantPn)) &&
+					(areJidsSameUser(participants[0]!.id, actingParticipantLid) ||
+						areJidsSameUser(participants[0]!.id, actingParticipantPn)) &&
 					child.tag === 'remove'
 				) {
 					msg.messageStubType = WAMessageStubType.GROUP_PARTICIPANT_LEAVE
@@ -805,9 +805,9 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 				break
 			case 'account_sync':
-				if (child?.tag === 'disappearing_mode') {
-					const newDuration = +(child.attrs.duration ?? '0')
-					const timestamp = +(child.attrs.t ?? '0')
+				if (child!.tag === 'disappearing_mode') {
+					const newDuration = +child!.attrs.duration!
+					const timestamp = +child!.attrs.t!
 
 					logger.info({ newDuration }, 'updated account disappearing mode')
 
@@ -820,7 +820,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 							}
 						}
 					})
-				} else if (child?.tag === 'blocklist') {
+				} else if (child!.tag === 'blocklist') {
 					const blocklists = getBinaryNodeChildren(child, 'item')
 
 					for (const { attrs } of blocklists) {

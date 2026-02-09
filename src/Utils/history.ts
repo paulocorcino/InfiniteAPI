@@ -294,7 +294,7 @@ export const processHistoryMessage = (item: proto.IHistorySync, logger?: ILogger
 		case proto.HistorySync.HistorySyncType.FULL:
 		case proto.HistorySync.HistorySyncType.ON_DEMAND:
 			for (const chat of (item.conversations ?? []) as Chat[]) {
-				const chatId = chat.id ?? ''
+				const chatId = chat.id!
 
 				// Source 2: Extract LID-PN mapping from conversation object
 				// This handles cases where the mapping isn't in phoneNumberToLidMappings
@@ -371,7 +371,7 @@ export const processHistoryMessage = (item: proto.IHistorySync, logger?: ILogger
 			break
 		case proto.HistorySync.HistorySyncType.PUSH_NAME:
 			for (const c of (item.pushnames ?? [])) {
-				contacts.push({ id: c.id ?? '', notify: c.pushname ?? '' })
+				contacts.push({ id: c.id!, notify: c.pushname! })
 			}
 
 			break

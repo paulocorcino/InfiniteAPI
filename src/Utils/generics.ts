@@ -343,7 +343,7 @@ const STATUS_MAP: { [_: string]: proto.WebMessageInfo.Status } = {
  * @param type type from receipt
  */
 export const getStatusFromReceiptType = (type: string | undefined) => {
-	const status = STATUS_MAP[type ?? '']
+	const status = STATUS_MAP[type!]
 	if (typeof type === 'undefined') {
 		return proto.WebMessageInfo.Status.DELIVERY_ACK
 	}
