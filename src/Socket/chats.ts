@@ -886,8 +886,8 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			const { onMutation } = newAppStateChunkHandler(false)
 			const { mutationMap } = await decodePatches(
 				name,
-				[{ ...encodeResult?.patch, version: { version: encodeResult?.state?.version } }],
-				initial ?? { version: 0, hash: Buffer.alloc(0), indexValueMap: {} },
+				[{ ...encodeResult!.patch, version: { version: encodeResult!.state.version } }],
+				initial!,
 				getAppStateSyncKey,
 				config.options,
 				undefined,

@@ -1265,7 +1265,7 @@ function consolidateEvents(data: BufferedEventData) {
 
 	const messageUpsertList = Object.values(data.messageUpserts)
 	if (messageUpsertList.length) {
-		const type = messageUpsertList[0]?.type
+		const type = messageUpsertList[0]?.type ?? 'notify'
 		map['messages.upsert'] = {
 			messages: messageUpsertList.map(m => m.message),
 			type

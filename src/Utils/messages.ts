@@ -264,9 +264,11 @@ export const prepareWAMessageMedia = async (
 					throw new Boom('Missing file path for processing')
 				}
 
+				const filePath = originalFilePath!
+
 				if (requiresThumbnailComputation) {
 					const { thumbnail, originalImageDimensions } = await generateThumbnail(
-						originalFilePath,
+						filePath,
 						mediaType as 'image' | 'video',
 						options
 					)
@@ -281,12 +283,12 @@ export const prepareWAMessageMedia = async (
 				}
 
 				if (requiresDurationComputation) {
-					uploadData.seconds = await getAudioDuration(originalFilePath)
+					uploadData.seconds = await getAudioDuration(filePath)
 					logger?.debug('computed audio duration')
 				}
 
 				if (requiresWaveformProcessing) {
-					uploadData.waveform = await getAudioWaveform(originalFilePath, logger)
+					uploadData.waveform = await getAudioWaveform(filePath, logger)
 					logger?.debug('processed waveform')
 				}
 
@@ -1767,7 +1769,7 @@ export const generateWAMessageFromContent = (
 
 		const innerContent = innerMessage[key as Exclude<keyof proto.IMessage, 'conversation'>]
 		const contextInfo: proto.IContextInfo =
-			(innerContent && 'contextInfo' in innerContent && innerMessage[key as Exclude<keyof proto.IMessage, 'conversation'>]?.contextInfo) || {}
+			(innerContent && typeof innerContent === 'object' && 'contextInfo' in innerContent && (innerContent as Record<string, unknown>).contextInfo as proto.IContextInfo) || {}
 		contextInfo.participant = jidNormalizedUser(participant ?? '')
 		contextInfo.stanzaId = quoted.key.id
 		contextInfo.quotedMessage = quotedMsg

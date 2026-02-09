@@ -552,11 +552,7 @@ export const makeSocket = (config: SocketConfig) => {
 		})
 
 		if (sendMsg) {
-			if (!onClose) {
-				throw new Error('onClose handler not initialized')
-			}
-
-			sendRawMessage(sendMsg).catch(onClose)
+				sendRawMessage(sendMsg).catch(onClose!)
 		}
 
 		return result
