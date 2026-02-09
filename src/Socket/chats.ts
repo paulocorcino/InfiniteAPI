@@ -8,6 +8,7 @@ import type {
 	CacheStore,
 	ChatModification,
 	ChatMutation,
+	ChatUpdate,
 	LTHashState,
 	MessageUpsertType,
 	PresenceData,
