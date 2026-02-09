@@ -754,9 +754,16 @@ export const makeChatsSocket = (config: SocketConfig) => {
 				})
 			}
 		} else {
-			if (!toJid) return
+			if (!toJid) {
+				logger.warn('sendPresenceUpdate: toJid is missing, skipping')
+				return
+			}
+
 			const decoded = jidDecode(toJid)
-			if (!decoded) return
+			if (!decoded) {
+				logger.warn({ toJid }, 'sendPresenceUpdate: failed to decode toJid, skipping')
+				return
+			}
 			const { server } = decoded
 			const isLid = server === 'lid'
 
@@ -798,7 +805,10 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		let presence: PresenceData | undefined
 		const jid = attrs.from
 		const participant = attrs.participant || attrs.from
-		if (!jid) return
+		if (!jid) {
+			logger.warn({ attrs }, 'handlePresenceUpdate: jid (attrs.from) is missing, skipping')
+			return
+		}
 
 		if (shouldIgnoreJid(jid) && jid !== S_WHATSAPP_NET) {
 			return
@@ -811,7 +821,10 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			}
 		} else if (Array.isArray(content)) {
 			const [firstChild] = content
-			if (!firstChild) return
+			if (!firstChild) {
+				logger.warn({ jid }, 'handlePresenceUpdate: firstChild content is empty, skipping')
+				return
+			}
 			let type = firstChild.tag as WAPresence
 			if (type === 'paused') {
 				type = 'available'
@@ -827,7 +840,11 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		}
 
 		if (presence) {
-			if (!participant) return
+			if (!participant) {
+				logger.warn({ jid }, 'handlePresenceUpdate: participant is missing, skipping')
+				return
+			}
+
 			ev.emit('presence.update', { id: jid, presences: { [participant]: presence } })
 		}
 	}
