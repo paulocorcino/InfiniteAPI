@@ -27,7 +27,7 @@ export class SenderKeyMessage extends CiphertextMessage {
 		super()
 
 		if (serialized) {
-			const version = serialized[0]!
+			const version = serialized[0] ?? 0
 			const message = serialized.slice(1, serialized.length - this.SIGNATURE_LENGTH)
 			const signature = serialized.slice(-1 * this.SIGNATURE_LENGTH)
 			const senderKeyMessage = proto.SenderKeyMessage.decode(message).toJSON() as SenderKeyMessageStructure
@@ -42,22 +42,26 @@ export class SenderKeyMessage extends CiphertextMessage {
 					: senderKeyMessage.ciphertext
 			this.signature = signature
 		} else {
+			if (ciphertext == null || keyId == null || iteration == null || signatureKey == null) {
+				throw new Error('Missing required parameters for SenderKeyMessage construction')
+			}
+
 			const version = (((this.CURRENT_VERSION << 4) | this.CURRENT_VERSION) & 0xff) % 256
-			const ciphertextBuffer = Buffer.from(ciphertext!)
+			const ciphertextBuffer = Buffer.from(ciphertext)
 			const message = proto.SenderKeyMessage.encode(
 				proto.SenderKeyMessage.create({
-					id: keyId!,
-					iteration: iteration!,
+					id: keyId,
+					iteration: iteration,
 					ciphertext: ciphertextBuffer
 				})
 			).finish()
 
-			const signature = this.getSignature(signatureKey!, Buffer.concat([Buffer.from([version]), message]))
+			const signature = this.getSignature(signatureKey, Buffer.concat([Buffer.from([version]), message]))
 
 			this.serialized = Buffer.concat([Buffer.from([version]), message, Buffer.from(signature)])
 			this.messageVersion = this.CURRENT_VERSION
-			this.keyId = keyId!
-			this.iteration = iteration!
+			this.keyId = keyId
+			this.iteration = iteration
 			this.ciphertext = ciphertextBuffer
 			this.signature = signature
 		}

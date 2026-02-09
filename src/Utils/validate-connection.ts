@@ -64,7 +64,12 @@ const getClientPayload = (config: SocketConfig) => {
 }
 
 export const generateLoginNode = (userJid: string, config: SocketConfig): proto.IClientPayload => {
-	const { user, device } = jidDecode(userJid)!
+	const decoded = jidDecode(userJid)
+	if (!decoded) {
+		throw new Boom('Invalid user JID', { statusCode: 400 })
+	}
+
+	const { user, device } = decoded
 	const payload: proto.IClientPayload = {
 		...getClientPayload(config),
 		passive: true,
@@ -153,6 +158,9 @@ export const configureSuccessfulPairing = (
 	}: Pick<AuthenticationCreds, 'advSecretKey' | 'signedIdentityKey' | 'signalIdentities'>
 ) => {
 	const msgId = stanza.attrs.id
+	if (!msgId) {
+		throw new Boom('Missing message ID', { statusCode: 400 })
+	}
 
 	const pairSuccessNode = getBinaryNodeChild(stanza, 'pair-success')
 
@@ -168,42 +176,51 @@ export const configureSuccessfulPairing = (
 	const bizName = businessNode?.attrs.name
 	const jid = deviceNode.attrs.jid
 	const lid = deviceNode.attrs.lid
+	if (!jid || !lid) {
+		throw new Boom('Missing JID or LID in device node', { statusCode: 400 })
+	}
 
 	const { details, hmac, accountType } = proto.ADVSignedDeviceIdentityHMAC.decode(deviceIdentityNode.content as Buffer)
+	if (!details || !hmac) {
+		throw new Boom('Missing ADV signature fields', { statusCode: 400 })
+	}
 
 	let hmacPrefix = Buffer.from([])
 	if (accountType !== undefined && accountType === proto.ADVEncryptionType.HOSTED) {
 		hmacPrefix = WA_ADV_HOSTED_ACCOUNT_SIG_PREFIX
 	}
 
-	const advSign = hmacSign(Buffer.concat([hmacPrefix, details!]), Buffer.from(advSecretKey, 'base64'))
-	if (Buffer.compare(hmac!, advSign) !== 0) {
+	const advSign = hmacSign(Buffer.concat([hmacPrefix, details]), Buffer.from(advSecretKey, 'base64'))
+	if (Buffer.compare(hmac, advSign) !== 0) {
 		throw new Boom('Invalid account signature')
 	}
 
-	const account = proto.ADVSignedDeviceIdentity.decode(details!)
+	const account = proto.ADVSignedDeviceIdentity.decode(details)
 	const { accountSignatureKey, accountSignature, details: deviceDetails } = account
+	if (!accountSignatureKey || !accountSignature || !deviceDetails) {
+		throw new Boom('Missing ADV account fields', { statusCode: 400 })
+	}
 
-	const deviceIdentity = proto.ADVDeviceIdentity.decode(deviceDetails!)
+	const deviceIdentity = proto.ADVDeviceIdentity.decode(deviceDetails)
 
 	const accountSignaturePrefix =
 		deviceIdentity.deviceType === proto.ADVEncryptionType.HOSTED
 			? WA_ADV_HOSTED_ACCOUNT_SIG_PREFIX
 			: WA_ADV_ACCOUNT_SIG_PREFIX
-	const accountMsg = Buffer.concat([accountSignaturePrefix, deviceDetails!, signedIdentityKey.public])
-	if (!Curve.verify(accountSignatureKey!, accountMsg, accountSignature!)) {
+	const accountMsg = Buffer.concat([accountSignaturePrefix, deviceDetails, signedIdentityKey.public])
+	if (!Curve.verify(accountSignatureKey, accountMsg, accountSignature)) {
 		throw new Boom('Failed to verify account signature')
 	}
 
 	const deviceMsg = Buffer.concat([
 		WA_ADV_DEVICE_SIG_PREFIX,
-		deviceDetails!,
+		deviceDetails,
 		signedIdentityKey.public,
-		accountSignatureKey!
+		accountSignatureKey
 	])
 	account.deviceSignature = Curve.sign(signedIdentityKey.private, deviceMsg)
 
-	const identity = createSignalIdentity(lid!, accountSignatureKey!)
+	const identity = createSignalIdentity(lid, accountSignatureKey)
 	const accountEnc = encodeSignedDeviceIdentity(account, false)
 
 	const reply: BinaryNode = {
@@ -211,7 +228,7 @@ export const configureSuccessfulPairing = (
 		attrs: {
 			to: S_WHATSAPP_NET,
 			type: 'result',
-			id: msgId!
+			id: msgId
 		},
 		content: [
 			{
@@ -220,7 +237,7 @@ export const configureSuccessfulPairing = (
 				content: [
 					{
 						tag: 'device-identity',
-						attrs: { 'key-index': deviceIdentity.keyIndex!.toString() },
+						attrs: { 'key-index': String(deviceIdentity.keyIndex ?? '') },
 						content: accountEnc
 					}
 				]
@@ -230,7 +247,7 @@ export const configureSuccessfulPairing = (
 
 	const authUpdate: Partial<AuthenticationCreds> = {
 		account,
-		me: { id: jid!, name: bizName, lid },
+		me: { id: jid, name: bizName, lid },
 		signalIdentities: [...(signalIdentities || []), identity],
 		platform: platformNode?.attrs.name
 	}

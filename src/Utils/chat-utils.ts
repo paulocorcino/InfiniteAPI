@@ -154,7 +154,12 @@ export const encodeSyncdPatch = async (
 	})
 	const encoded = proto.SyncActionData.encode(dataProto).finish()
 
-	const keyValue = mutationKeys(key.keyData!)
+	const keyData = key.keyData
+	if (!keyData) {
+		throw new Boom('Missing keyData for encoding', { statusCode: 500 })
+	}
+
+	const keyValue = mutationKeys(keyData)
 
 	const encValue = aesEncrypt(encoded, keyValue.valueEncryptionKey)
 	const valueMac = generateMac(operation, encValue, encKeyId, keyValue.valueMacKey)
@@ -210,15 +215,34 @@ export const decodeSyncdMutations = async (
 		// if it's a syncdmutation, get the operation property
 		// otherwise, if it's only a record -- it'll be a SET mutation
 		const operation = 'operation' in msgMutation ? msgMutation.operation : proto.SyncdMutation.SyncdOperation.SET
+		if (operation == null) {
+			throw new Boom('Missing operation in mutation', { statusCode: 500 })
+		}
+
 		const record =
 			'record' in msgMutation && !!msgMutation.record ? msgMutation.record : (msgMutation as proto.ISyncdRecord)
 
-		const key = await getKey(record.keyId!.id!)
-		const content = Buffer.from(record.value!.blob!)
+		const keyIdBuf = record.keyId?.id
+		if (!keyIdBuf) {
+			throw new Boom('Missing keyId in record', { statusCode: 500 })
+		}
+
+		const recordBlob = record.value?.blob
+		if (!recordBlob) {
+			throw new Boom('Missing record blob', { statusCode: 500 })
+		}
+
+		const indexBlob = record.index?.blob
+		if (!indexBlob) {
+			throw new Boom('Missing index blob in record', { statusCode: 500 })
+		}
+
+		const key = await getKey(keyIdBuf)
+		const content = Buffer.from(recordBlob)
 		const encContent = content.slice(0, -32)
 		const ogValueMac = content.slice(-32)
 		if (validateMacs) {
-			const contentHmac = generateMac(operation!, encContent, record.keyId!.id!, key.valueMacKey)
+			const contentHmac = generateMac(operation, encContent, keyIdBuf, key.valueMacKey)
 			if (Buffer.compare(contentHmac, ogValueMac) !== 0) {
 				throw new Boom('HMAC content verification failed')
 			}
@@ -227,20 +251,25 @@ export const decodeSyncdMutations = async (
 		const result = aesDecrypt(encContent, key.valueEncryptionKey)
 		const syncAction = proto.SyncActionData.decode(result)
 
+		const syncActionIndex = syncAction.index
+		if (!syncActionIndex) {
+			throw new Boom('Missing index in sync action data', { statusCode: 500 })
+		}
+
 		if (validateMacs) {
-			const hmac = hmacSign(syncAction.index!, key.indexKey)
-			if (Buffer.compare(hmac, record.index!.blob!) !== 0) {
+			const hmac = hmacSign(syncActionIndex, key.indexKey)
+			if (Buffer.compare(hmac, indexBlob) !== 0) {
 				throw new Boom('HMAC index verification failed')
 			}
 		}
 
-		const indexStr = Buffer.from(syncAction.index!).toString()
+		const indexStr = Buffer.from(syncActionIndex).toString()
 		onMutation({ syncAction, index: JSON.parse(indexStr) })
 
 		ltGenerator.mix({
-			indexMac: record.index!.blob!,
+			indexMac: indexBlob,
 			valueMac: ogValueMac,
-			operation: operation!
+			operation: operation
 		})
 	}
 
@@ -256,7 +285,12 @@ export const decodeSyncdMutations = async (
 			})
 		}
 
-		return mutationKeys(keyEnc.keyData!)
+		const keyData = keyEnc.keyData
+		if (!keyData) {
+			throw new Boom('Missing keyData in app state sync key', { statusCode: 500 })
+		}
+
+		return mutationKeys(keyData)
 	}
 }
 
@@ -269,28 +303,71 @@ export const decodeSyncdPatch = async (
 	validateMacs: boolean
 ) => {
 	if (validateMacs) {
-		const base64Key = Buffer.from(msg.keyId!.id!).toString('base64')
+		const msgKeyId = msg.keyId?.id
+		if (!msgKeyId) {
+			throw new Boom('Missing keyId in patch message', { statusCode: 500 })
+		}
+
+		const base64Key = Buffer.from(msgKeyId).toString('base64')
 		const mainKeyObj = await getAppStateSyncKey(base64Key)
 		if (!mainKeyObj) {
 			throw new Boom(`failed to find key "${base64Key}" to decode patch`, { statusCode: 404, data: { msg } })
 		}
 
-		const mainKey = mutationKeys(mainKeyObj.keyData!)
-		const mutationmacs = msg.mutations!.map(mutation => mutation.record!.value!.blob!.slice(-32))
+		const mainKeyData = mainKeyObj.keyData
+		if (!mainKeyData) {
+			throw new Boom('Missing keyData in main key object', { statusCode: 500 })
+		}
+
+		const mainKey = mutationKeys(mainKeyData)
+
+		const msgMutations = msg.mutations
+		if (!msgMutations) {
+			throw new Boom('Missing mutations in patch message', { statusCode: 500 })
+		}
+
+		const mutationmacs = msgMutations.map(mutation => {
+			const mutBlob = mutation.record?.value?.blob
+			if (!mutBlob) {
+				throw new Boom('Missing blob in mutation record', { statusCode: 500 })
+			}
+
+			return mutBlob.slice(-32)
+		})
+
+		const msgSnapshotMac = msg.snapshotMac
+		if (!msgSnapshotMac) {
+			throw new Boom('Missing snapshotMac in patch message', { statusCode: 500 })
+		}
+
+		const msgVersion = msg.version?.version
+		if (msgVersion == null) {
+			throw new Boom('Missing version in patch message', { statusCode: 500 })
+		}
+
+		const msgPatchMac = msg.patchMac
+		if (!msgPatchMac) {
+			throw new Boom('Missing patchMac in patch message', { statusCode: 500 })
+		}
 
 		const patchMac = generatePatchMac(
-			msg.snapshotMac!,
+			msgSnapshotMac,
 			mutationmacs,
-			toNumber(msg.version!.version),
+			toNumber(msgVersion),
 			name,
 			mainKey.patchMacKey
 		)
-		if (Buffer.compare(patchMac, msg.patchMac!) !== 0) {
+		if (Buffer.compare(patchMac, msgPatchMac) !== 0) {
 			throw new Boom('Invalid patch mac')
 		}
 	}
 
-	const result = await decodeSyncdMutations(msg.mutations!, initialState, getAppStateSyncKey, onMutation, validateMacs)
+	const patchMutations = msg.mutations
+	if (!patchMutations) {
+		throw new Boom('Missing mutations in patch message', { statusCode: 500 })
+	}
+
+	const result = await decodeSyncdMutations(patchMutations, initialState, getAppStateSyncKey, onMutation, validateMacs)
 	return result
 }
 
@@ -332,7 +409,7 @@ export const extractSyncdPatches = async (result: BinaryNode, options: RequestIn
 
 					const syncd = proto.SyncdPatch.decode(content as Uint8Array)
 					if (!syncd.version) {
-						syncd.version = { version: +collectionNode.attrs.version! + 1 }
+						syncd.version = { version: +(collectionNode.attrs.version ?? 0) + 1 }
 					}
 
 					syncds.push(syncd)
@@ -370,19 +447,30 @@ export const decodeSyncdSnapshot = async (
 	validateMacs = true
 ) => {
 	const newState = newLTHashState()
-	newState.version = toNumber(snapshot.version!.version)
+
+	const snapshotVersion = snapshot.version?.version
+	if (snapshotVersion == null) {
+		throw new Boom('Missing version in snapshot', { statusCode: 500 })
+	}
+
+	newState.version = toNumber(snapshotVersion)
 
 	const mutationMap: ChatMutationMap = {}
 	const areMutationsRequired = typeof minimumVersionNumber === 'undefined' || newState.version > minimumVersionNumber
 
+	const snapshotRecords = snapshot.records
+	if (!snapshotRecords) {
+		throw new Boom('Missing records in snapshot', { statusCode: 500 })
+	}
+
 	const { hash, indexValueMap } = await decodeSyncdMutations(
-		snapshot.records!,
+		snapshotRecords,
 		newState,
 		getAppStateSyncKey,
 		areMutationsRequired
 			? mutation => {
 					const index = mutation.syncAction.index?.toString()
-					mutationMap[index!] = mutation
+					mutationMap[index ?? ''] = mutation
 				}
 			: () => {},
 		validateMacs
@@ -391,15 +479,31 @@ export const decodeSyncdSnapshot = async (
 	newState.indexValueMap = indexValueMap
 
 	if (validateMacs) {
-		const base64Key = Buffer.from(snapshot.keyId!.id!).toString('base64')
+		const snapKeyId = snapshot.keyId?.id
+		if (!snapKeyId) {
+			throw new Boom('Missing keyId in snapshot', { statusCode: 500 })
+		}
+
+		const base64Key = Buffer.from(snapKeyId).toString('base64')
 		const keyEnc = await getAppStateSyncKey(base64Key)
 		if (!keyEnc) {
 			throw new Boom(`failed to find key "${base64Key}" to decode mutation`)
 		}
 
-		const result = mutationKeys(keyEnc.keyData!)
+		const snapKeyData = keyEnc.keyData
+		if (!snapKeyData) {
+			throw new Boom('Missing keyData in snapshot key', { statusCode: 500 })
+		}
+
+		const result = mutationKeys(snapKeyData)
 		const computedSnapshotMac = generateSnapshotMac(newState.hash, newState.version, name, result.snapshotMacKey)
-		if (Buffer.compare(snapshot.mac!, computedSnapshotMac) !== 0) {
+
+		const snapshotMac = snapshot.mac
+		if (!snapshotMac) {
+			throw new Boom('Missing mac in snapshot', { statusCode: 500 })
+		}
+
+		if (Buffer.compare(snapshotMac, computedSnapshotMac) !== 0) {
 			throw new Boom(`failed to verify LTHash at ${newState.version} of ${name} from snapshot`)
 		}
 	}
@@ -436,7 +540,12 @@ export const decodePatches = async (
 			syncd.mutations?.push(...ref.mutations)
 		}
 
-		const patchVersion = toNumber(version!.version)
+		const ver = version?.version
+		if (ver == null) {
+			throw new Boom('Missing version in patch', { statusCode: 500 })
+		}
+
+		const patchVersion = toNumber(ver)
 
 		newState.version = patchVersion
 		const shouldMutate = typeof minimumVersionNumber === 'undefined' || patchVersion > minimumVersionNumber
@@ -449,7 +558,7 @@ export const decodePatches = async (
 			shouldMutate
 				? mutation => {
 						const index = mutation.syncAction.index?.toString()
-						mutationMap[index!] = mutation
+						mutationMap[index ?? ''] = mutation
 					}
 				: () => {},
 			true
@@ -459,15 +568,30 @@ export const decodePatches = async (
 		newState.indexValueMap = decodeResult.indexValueMap
 
 		if (validateMacs) {
-			const base64Key = Buffer.from(keyId!.id!).toString('base64')
+			const patchKeyId = keyId?.id
+			if (!patchKeyId) {
+				throw new Boom('Missing keyId in patch', { statusCode: 500 })
+			}
+
+			const base64Key = Buffer.from(patchKeyId).toString('base64')
 			const keyEnc = await getAppStateSyncKey(base64Key)
 			if (!keyEnc) {
 				throw new Boom(`failed to find key "${base64Key}" to decode mutation`)
 			}
 
-			const result = mutationKeys(keyEnc.keyData!)
+			const patchKeyData = keyEnc.keyData
+			if (!patchKeyData) {
+				throw new Boom('Missing keyData in patch key', { statusCode: 500 })
+			}
+
+			const result = mutationKeys(patchKeyData)
 			const computedSnapshotMac = generateSnapshotMac(newState.hash, newState.version, name, result.snapshotMacKey)
-			if (Buffer.compare(snapshotMac!, computedSnapshotMac) !== 0) {
+
+			if (!snapshotMac) {
+				throw new Boom('Missing snapshotMac in patch', { statusCode: 500 })
+			}
+
+			if (Buffer.compare(snapshotMac, computedSnapshotMac) !== 0) {
 				throw new Boom(`failed to verify LTHash at ${newState.version} of ${name}`)
 			}
 		}
@@ -565,7 +689,7 @@ export const chatModificationToAppPatch = (mod: ChatModification, jid: string) =
 					messageTimestamp: timestamp
 				}
 			},
-			index: ['deleteMessageForMe', jid, key.id!, key.fromMe ? '1' : '0', '0'],
+			index: ['deleteMessageForMe', jid, key.id ?? '', key.fromMe ? '1' : '0', '0'],
 			type: 'regular_high',
 			apiVersion: 3,
 			operation: OP.SET
@@ -615,7 +739,11 @@ export const chatModificationToAppPatch = (mod: ChatModification, jid: string) =
 			operation: OP.SET
 		}
 	} else if ('star' in mod) {
-		const key = mod.star.messages[0]!
+		const key = mod.star.messages[0]
+		if (!key) {
+			throw new Boom('Missing star message key', { statusCode: 400 })
+		}
+
 		patch = {
 			syncAction: {
 				starAction: {
@@ -768,7 +896,7 @@ export const processSyncAction = (
 			{
 				id,
 				muteEndTime: action.muteAction?.muted ? toNumber(action.muteAction.muteEndTimestamp) : null,
-				conditional: getChatUpdateConditional(id!, undefined)
+				conditional: getChatUpdateConditional(id ?? '', undefined)
 			}
 		])
 	} else if (action?.archiveChatAction || type === 'archive' || type === 'unarchive') {
@@ -797,7 +925,7 @@ export const processSyncAction = (
 			{
 				id,
 				archived: isArchived,
-				conditional: getChatUpdateConditional(id!, msgRange)
+				conditional: getChatUpdateConditional(id ?? '', msgRange)
 			}
 		])
 	} else if (action?.markChatAsReadAction) {
@@ -811,7 +939,7 @@ export const processSyncAction = (
 			{
 				id,
 				unreadCount: isNullUpdate ? null : !!markReadAction?.read ? 0 : -1,
-				conditional: getChatUpdateConditional(id!, markReadAction?.messageRange)
+				conditional: getChatUpdateConditional(id ?? '', markReadAction?.messageRange)
 			}
 		])
 	} else if (action?.deleteMessageForMeAction || type === 'deleteMessageForMe') {
@@ -837,7 +965,7 @@ export const processSyncAction = (
 			{
 				id,
 				pinned: action.pinAction?.pinned ? toNumber(action.timestamp) : null,
-				conditional: getChatUpdateConditional(id!, undefined)
+				conditional: getChatUpdateConditional(id ?? '', undefined)
 			}
 		])
 	} else if (action?.unarchiveChatsSetting) {
@@ -862,7 +990,7 @@ export const processSyncAction = (
 		])
 	} else if (action?.deleteChatAction || type === 'deleteChat') {
 		if (!isInitialSync) {
-			ev.emit('chats.delete', [id!])
+			ev.emit('chats.delete', [id ?? ''])
 		}
 	} else if (action?.labelEditAction) {
 		const { name, color, deleted, predefinedId } = action.labelEditAction

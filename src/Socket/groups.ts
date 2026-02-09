@@ -225,12 +225,12 @@ export const makeGroupsSocket = (config: SocketConfig) => {
 		groupAcceptInviteV4: ev.createBufferedFunction(
 			async (key: string | WAMessageKey, inviteMessage: proto.Message.IGroupInviteMessage) => {
 				key = typeof key === 'string' ? { remoteJid: key } : key
-				const results = await groupQuery(inviteMessage.groupJid!, 'set', [
+				const results = await groupQuery(inviteMessage.groupJid ?? '', 'set', [
 					{
 						tag: 'accept',
 						attrs: {
-							code: inviteMessage.inviteCode!,
-							expiration: inviteMessage.inviteExpiration!.toString(),
+							code: inviteMessage.inviteCode ?? '',
+							expiration: String(inviteMessage.inviteExpiration ?? ''),
 							admin: key.remoteJid!
 						}
 					}

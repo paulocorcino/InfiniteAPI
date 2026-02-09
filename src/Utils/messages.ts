@@ -168,14 +168,17 @@ export const prepareWAMessageMedia = async (
 	}
 
 	if (cacheableKey) {
-		const mediaBuff = await options.mediaCache!.get<Buffer>(cacheableKey)
+		const mediaBuff = await options.mediaCache?.get<Buffer>(cacheableKey)
 		if (mediaBuff) {
 			logger?.debug({ cacheableKey }, 'got media cache hit')
 
 			const obj = proto.Message.decode(mediaBuff)
 			const key = `${mediaType}Message`
 
-			Object.assign(obj[key as keyof proto.Message]!, { ...uploadData, media: undefined })
+			const mediaMsg = obj[key as keyof proto.Message]
+			if (mediaMsg) {
+				Object.assign(mediaMsg, { ...uploadData, media: undefined })
+			}
 
 			return obj
 		}
@@ -222,7 +225,7 @@ export const prepareWAMessageMedia = async (
 
 		if (cacheableKey) {
 			logger?.debug({ cacheableKey }, 'set cache')
-			await options.mediaCache!.set(cacheableKey, WAProto.Message.encode(obj).finish())
+			await options.mediaCache?.set(cacheableKey, WAProto.Message.encode(obj).finish())
 		}
 
 		return obj
@@ -257,9 +260,13 @@ export const prepareWAMessageMedia = async (
 		})(),
 		(async () => {
 			try {
+				if ((requiresThumbnailComputation || requiresDurationComputation || requiresWaveformProcessing) && !originalFilePath) {
+					throw new Boom('Missing file path for processing')
+				}
+
 				if (requiresThumbnailComputation) {
 					const { thumbnail, originalImageDimensions } = await generateThumbnail(
-						originalFilePath!,
+						originalFilePath,
 						mediaType as 'image' | 'video',
 						options
 					)
@@ -274,12 +281,12 @@ export const prepareWAMessageMedia = async (
 				}
 
 				if (requiresDurationComputation) {
-					uploadData.seconds = await getAudioDuration(originalFilePath!)
+					uploadData.seconds = await getAudioDuration(originalFilePath)
 					logger?.debug('computed audio duration')
 				}
 
 				if (requiresWaveformProcessing) {
-					uploadData.waveform = await getAudioWaveform(originalFilePath!, logger)
+					uploadData.waveform = await getAudioWaveform(originalFilePath, logger)
 					logger?.debug('processed waveform')
 				}
 
@@ -325,7 +332,7 @@ export const prepareWAMessageMedia = async (
 
 	if (cacheableKey) {
 		logger?.debug({ cacheableKey }, 'set cache')
-		await options.mediaCache!.set(cacheableKey, WAProto.Message.encode(obj).finish())
+		await options.mediaCache?.set(cacheableKey, WAProto.Message.encode(obj).finish())
 	}
 
 	return obj
@@ -359,7 +366,11 @@ export const generateForwardMessageContent = (message: WAMessage, forceForward?:
 
 	// hacky copy
 	content = normalizeMessageContent(content)
-	content = proto.Message.decode(proto.Message.encode(content!).finish())
+	if (!content) {
+		throw new Boom('no content in message', { statusCode: 400 })
+	}
+
+	content = proto.Message.decode(proto.Message.encode(content).finish())
 
 	let key = Object.keys(content)[0] as keyof proto.IMessage
 
@@ -591,7 +602,8 @@ export const generateCarouselMessage = async (
 
 	// Validate cards
 	for (let i = 0; i < cards.length; i++) {
-		const card = cards[i]!
+		const card = cards[i]
+		if (!card) continue
 
 		// Validate mutual exclusivity of media types
 		if (card.image && card.video) {
@@ -1042,7 +1054,9 @@ export const generateProductCarouselMessage = (
 
 	// Validate each product has a valid productId
 	for (let i = 0; i < products.length; i++) {
-		const product = products[i]!
+		const product = products[i]
+		if (!product) continue
+
 		if (!product.productId || typeof product.productId !== 'string' || product.productId.trim().length === 0) {
 			throw new Boom(`Product at index ${i} must have a non-empty productId`, { statusCode: 400 })
 		}
@@ -1261,14 +1275,7 @@ export const generateWAMessageContent = async (
 		options.logger?.warn('[EXPERIMENTAL] Sending buttonsMessage - this may not work and can cause bans')
 	} else if (hasNonNullishProperty(message, 'text') && hasNonNullishProperty(message, 'templateButtons')) {
 		// Process templateButtons
-		const templateMessage: proto.Message.ITemplateMessage = {
-			hydratedTemplate: {
-				hydratedContentText: (message as any).text,
-				hydratedFooterText: (message as any).footer
-			}
-		}
-
-		templateMessage.hydratedTemplate!.hydratedButtons = ((message as any).templateButtons as any[]).map((btn: any) => {
+		const hydratedButtons = ((message as any).templateButtons as any[]).map((btn: any) => {
 			if (btn.quickReplyButton) {
 				return { index: btn.index, quickReplyButton: btn.quickReplyButton }
 			} else if (btn.urlButton) {
@@ -1278,6 +1285,14 @@ export const generateWAMessageContent = async (
 			}
 			return btn
 		})
+
+		const templateMessage: proto.Message.ITemplateMessage = {
+			hydratedTemplate: {
+				hydratedContentText: (message as any).text,
+				hydratedFooterText: (message as any).footer,
+				hydratedButtons
+			}
+		}
 
 		m.templateMessage = templateMessage
 		options.logger?.warn('[EXPERIMENTAL] Sending templateMessage - this may not work and can cause bans')
@@ -1354,7 +1369,9 @@ export const generateWAMessageContent = async (
 		let expectedVideoCount = 0
 
 		for (let i = 0; i < medias.length; i++) {
-			const media = medias[i]!
+			const media = medias[i]
+			if (!media) continue
+
 			if (hasNonNullishProperty(media as AnyMessageContent, 'image')) {
 				expectedImageCount++
 			} else if (hasNonNullishProperty(media as AnyMessageContent, 'video')) {
@@ -1653,13 +1670,15 @@ export const generateWAMessageContent = async (
 	}
 
 	if (hasOptionalProperty(message, 'mentions') && message.mentions?.length) {
-		const messageType = Object.keys(m)[0]! as Extract<keyof proto.IMessage, MessageWithContextInfo>
-		const key = m[messageType]
-		if ('contextInfo' in key! && !!key.contextInfo) {
-			key.contextInfo.mentionedJid = message.mentions
-		} else if (key!) {
-			key.contextInfo = {
-				mentionedJid: message.mentions
+		const messageType = Object.keys(m)[0] as Extract<keyof proto.IMessage, MessageWithContextInfo>
+		if (messageType) {
+			const key = m[messageType]
+			if (key && 'contextInfo' in key && !!key.contextInfo) {
+				key.contextInfo.mentionedJid = message.mentions
+			} else if (key) {
+				key.contextInfo = {
+					mentionedJid: message.mentions
+				}
 			}
 		}
 	}
@@ -1676,12 +1695,14 @@ export const generateWAMessageContent = async (
 	}
 
 	if (hasOptionalProperty(message, 'contextInfo') && !!message.contextInfo) {
-		const messageType = Object.keys(m)[0]! as Extract<keyof proto.IMessage, MessageWithContextInfo>
-		const key = m[messageType]
-		if ('contextInfo' in key! && !!key.contextInfo) {
-			key.contextInfo = { ...key.contextInfo, ...message.contextInfo }
-		} else if (key!) {
-			key.contextInfo = message.contextInfo
+		const messageType = Object.keys(m)[0] as Extract<keyof proto.IMessage, MessageWithContextInfo>
+		if (messageType) {
+			const key = m[messageType]
+			if (key && 'contextInfo' in key && !!key.contextInfo) {
+				key.contextInfo = { ...key.contextInfo, ...message.contextInfo }
+			} else if (key) {
+				key.contextInfo = message.contextInfo
+			}
 		}
 	}
 
@@ -1708,8 +1729,16 @@ export const generateWAMessageFromContent = (
 		options.timestamp = new Date()
 	}
 
-	const innerMessage = normalizeMessageContent(message)!
-	const key = getContentType(innerMessage)! as Exclude<keyof proto.IMessage, 'conversation'>
+	const innerMessage = normalizeMessageContent(message)
+	if (!innerMessage) {
+		throw new Boom('no content in message', { statusCode: 400 })
+	}
+
+	const key = getContentType(innerMessage)
+	if (!key) {
+		throw new Boom('unable to determine message content type', { statusCode: 400 })
+	}
+
 	const timestamp = unixTimestampSeconds(options.timestamp)
 	const { quoted, userJid } = options
 
@@ -1718,8 +1747,16 @@ export const generateWAMessageFromContent = (
 			? userJid // TODO: Add support for LIDs
 			: quoted.participant || quoted.key.participant || quoted.key.remoteJid
 
-		let quotedMsg = normalizeMessageContent(quoted.message)!
-		const msgType = getContentType(quotedMsg)!
+		let quotedMsg = normalizeMessageContent(quoted.message)
+		if (!quotedMsg) {
+			throw new Boom('no content in quoted message', { statusCode: 400 })
+		}
+
+		const msgType = getContentType(quotedMsg)
+		if (!msgType) {
+			throw new Boom('unable to determine quoted message content type', { statusCode: 400 })
+		}
+
 		// strip any redundant properties
 		quotedMsg = proto.Message.create({ [msgType]: quotedMsg[msgType] })
 
@@ -1728,9 +1765,10 @@ export const generateWAMessageFromContent = (
 			delete quotedContent.contextInfo
 		}
 
+		const innerContent = innerMessage[key as Exclude<keyof proto.IMessage, 'conversation'>]
 		const contextInfo: proto.IContextInfo =
-			('contextInfo' in innerMessage[key]! && innerMessage[key]?.contextInfo) || {}
-		contextInfo.participant = jidNormalizedUser(participant!)
+			(innerContent && 'contextInfo' in innerContent && innerMessage[key as Exclude<keyof proto.IMessage, 'conversation'>]?.contextInfo) || {}
+		contextInfo.participant = jidNormalizedUser(participant ?? '')
 		contextInfo.stanzaId = quoted.key.id
 		contextInfo.quotedMessage = quotedMsg
 
