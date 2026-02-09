@@ -118,7 +118,7 @@ export const makeBusinessSocket = (config: SocketConfig) => {
 					content: [
 						{
 							tag: 'cover_photo',
-							attrs: { id: String(fbid), op: 'update', token: meta_hmac ?? '', ts: String(ts) }
+							attrs: { id: String(fbid), op: 'update', token: meta_hmac!, ts: String(ts) }
 						}
 					]
 				}

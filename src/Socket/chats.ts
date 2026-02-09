@@ -1107,8 +1107,8 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		ev.emit('messages.upsert', { messages: [msg], type })
 
 		if (!!msg.pushName) {
-			let jid = msg.key.fromMe ? (authState.creds.me?.id ?? '') : msg.key.participant || msg.key.remoteJid
-			jid = jidNormalizedUser(jid ?? '')
+			let jid = msg.key.fromMe ? authState.creds.me!.id : msg.key.participant || msg.key.remoteJid
+			jid = jidNormalizedUser(jid!)
 
 			if (!msg.key.fromMe) {
 				ev.emit('contacts.update', [{ id: jid, notify: msg.pushName, verifiedName: msg.verifiedBizName! }])

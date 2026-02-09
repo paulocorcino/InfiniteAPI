@@ -609,12 +609,8 @@ export const makeSocket = (config: SocketConfig) => {
 			},
 			content: [{ tag: 'count', attrs: {} }]
 		})
-		const countChild = getBinaryNodeChild(result, 'count')
-		if (!countChild) {
-			return 0
-		}
-
-		return +(countChild.attrs.value ?? 0)
+		const countChild = getBinaryNodeChild(result, 'count')!
+		return +countChild.attrs.value!
 	}
 
 	// Pre-key upload state management
@@ -1364,7 +1360,7 @@ export const makeSocket = (config: SocketConfig) => {
 			attrs: {
 				to: S_WHATSAPP_NET,
 				type: 'result',
-				id: stanza.attrs.id ?? ''
+				id: stanza.attrs.id!
 			}
 		}
 		await sendNode(iq)
@@ -1443,9 +1439,7 @@ export const makeSocket = (config: SocketConfig) => {
 		logger.info('opened connection to WA')
 		clearTimeout(qrTimer) // will never happen in all likelyhood -- but just in case WA sends success on first try
 
-		if (authState.creds.me) {
-			ev.emit('creds.update', { me: { ...authState.creds.me, lid: node.attrs.lid } })
-		}
+		ev.emit('creds.update', { me: { ...authState.creds.me!, lid: node.attrs.lid } })
 
 		ev.emit('connection.update', { connection: 'open' })
 
@@ -1468,23 +1462,13 @@ export const makeSocket = (config: SocketConfig) => {
 			const myLID = node.attrs.lid
 			process.nextTick(async () => {
 				try {
-					const me = authState.creds.me
-					if (!me) {
-						return
-					}
-
-					const myPN = me.id
+					const myPN = authState.creds.me!.id
 
 					// Store our own LID-PN mapping
 					await signalRepository.lidMapping.storeLIDPNMappings([{ lid: myLID, pn: myPN }])
 
 					// Create device list for our own user (needed for bulk migration)
-					const decoded = jidDecode(myPN)
-					if (!decoded) {
-						return
-					}
-
-					const { user, device } = decoded
+					const { user, device } = jidDecode(myPN)!
 					await authState.keys.set({
 						'device-list': {
 							[user]: [device?.toString() || '0']
@@ -1572,7 +1556,7 @@ export const makeSocket = (config: SocketConfig) => {
 			logger.debug({ name }, 'updated pushName')
 			sendNode({
 				tag: 'presence',
-				attrs: { name: name ?? '' }
+				attrs: { name: name! }
 			}).catch(err => {
 				logger.warn({ trace: err.stack }, 'error in sending presence update on name change')
 			})

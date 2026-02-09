@@ -358,13 +358,13 @@ export const makeCommunitiesSocket = (config: SocketConfig) => {
 		communityAcceptInviteV4: ev.createBufferedFunction(
 			async (key: string | WAMessageKey, inviteMessage: proto.Message.IGroupInviteMessage) => {
 				key = typeof key === 'string' ? { remoteJid: key } : key
-				const results = await communityQuery(inviteMessage.groupJid ?? '', 'set', [
+				const results = await communityQuery(inviteMessage.groupJid!, 'set', [
 					{
 						tag: 'accept',
 						attrs: {
-							code: inviteMessage.inviteCode ?? '',
+							code: inviteMessage.inviteCode!,
 							expiration: (inviteMessage.inviteExpiration ?? 0).toString(),
-							admin: key.remoteJid ?? ''
+							admin: key.remoteJid!
 						}
 					}
 				])
@@ -475,7 +475,7 @@ export const extractCommunityMetadata = (result: BinaryNode) => {
 		participants: getBinaryNodeChildren(community, 'participant').map(({ attrs }) => {
 			return {
 				// TODO: IMPLEMENT THE PN/LID FIELDS HERE!!
-				id: attrs.jid ?? '',
+				id: attrs.jid!,
 				admin: (attrs.type || null) as GroupParticipant['admin']
 			}
 		}),
