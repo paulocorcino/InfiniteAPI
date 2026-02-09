@@ -1,3 +1,3 @@
-import { LTHashAntiTampering } from 'whatsapp-rust-bridge'
+import { getLTHashAntiTampering } from './wasm-bridge'
 
-export const LT_HASH_ANTI_TAMPERING = new LTHashAntiTampering()
+export { getLTHashAntiTampering as LT_HASH_ANTI_TAMPERING }
