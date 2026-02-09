@@ -83,7 +83,8 @@ const BUFFERABLE_EVENT = [
 	'messages.delete',
 	'messages.reaction',
 	'message-receipt.update',
-	'groups.update'
+	'groups.update',
+	'lid-mapping.update'
 ] as const
 
 type BufferableEvent = (typeof BUFFERABLE_EVENT)[number]
@@ -882,7 +883,8 @@ const makeBufferData = (): BufferedEventData => {
 		messageReactions: {},
 		messageDeletes: {},
 		messageReceipts: {},
-		groupUpdates: {}
+		groupUpdates: {},
+		lidMappings: {}
 	}
 }
 
@@ -1198,6 +1200,16 @@ function append<E extends BufferableEvent>(
 			}
 
 			break
+		case 'lid-mapping.update':
+			const lidMappings = eventData as BaileysEventMap['lid-mapping.update']
+			for (const mapping of lidMappings) {
+				const key = `${mapping.lid}-${mapping.pn}`
+				if (!data.lidMappings[key]) {
+					data.lidMappings[key] = mapping
+				}
+			}
+
+			break
 		default:
 			throw new Error(`"${event}" cannot be buffered`)
 	}
@@ -1323,6 +1335,11 @@ function consolidateEvents(data: BufferedEventData) {
 	const groupUpdateList = Object.values(data.groupUpdates)
 	if (groupUpdateList.length) {
 		map['groups.update'] = groupUpdateList
+	}
+
+	const lidMappingList = Object.values(data.lidMappings)
+	if (lidMappingList.length) {
+		map['lid-mapping.update'] = lidMappingList
 	}
 
 	return map
