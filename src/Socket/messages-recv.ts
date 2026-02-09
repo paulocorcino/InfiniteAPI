@@ -156,16 +156,17 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			throw new Boom('Not authenticated')
 		}
 
-		if (await placeholderResendCache.get(messageKey?.id)) {
+		const msgId = messageKey?.id ?? ''
+		if (await placeholderResendCache.get(msgId)) {
 			logger.debug({ messageKey }, 'already requested resend')
 			return
 		} else {
-			await placeholderResendCache.set(messageKey?.id, true)
+			await placeholderResendCache.set(msgId, true)
 		}
 
 		await delay(2000)
 
-		if (!(await placeholderResendCache.get(messageKey?.id))) {
+		if (!(await placeholderResendCache.get(msgId))) {
 			logger.debug({ messageKey }, 'message received while resend requested')
 			return 'RESOLVED'
 		}
@@ -180,9 +181,9 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		}
 
 		setTimeout(async () => {
-			if (await placeholderResendCache.get(messageKey?.id)) {
+			if (await placeholderResendCache.get(msgId)) {
 				logger.debug({ messageKey }, 'PDO message without response after 8 seconds. Phone possibly offline')
-				await placeholderResendCache.del(messageKey?.id)
+				await placeholderResendCache.del(msgId)
 			}
 		}, 8_000)
 

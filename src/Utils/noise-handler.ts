@@ -150,7 +150,7 @@ export const makeNoiseHandler = ({
 		while (true) {
 			if (inBytes.length < 3) return
 
-			size = (inBytes[0] << 16) | (inBytes[1] << 8) | inBytes[2]
+			size = (inBytes[0]! << 16) | (inBytes[1]! << 8) | inBytes[2]!
 
 			if (inBytes.length < size + 3) return
 
