@@ -317,7 +317,7 @@ export const getStream = async (item: WAMediaUpload, opts?: RequestInit & { maxC
 	const urlStr = item.url.toString()
 
 	if (urlStr.startsWith('data:')) {
-		const buffer = Buffer.from(urlStr.split(',')[1]!, 'base64')
+		const buffer = Buffer.from(urlStr.split(',')[1] ?? '', 'base64')
 		return { stream: toReadable(buffer), type: 'buffer' } as const
 	}
 
@@ -414,7 +414,11 @@ export const encryptedStream = async (
 
 	let fileLength = 0
 	const aes = Crypto.createCipheriv('aes-256-cbc', cipherKey, iv)
-	const hmac = Crypto.createHmac('sha256', macKey!).update(iv)
+	if (!macKey) {
+		throw new Boom('Failed to derive media mac key')
+	}
+
+	const hmac = Crypto.createHmac('sha256', macKey).update(iv)
 	const sha256Plain = Crypto.createHash('sha256')
 	const sha256Enc = Crypto.createHash('sha256')
 
@@ -528,7 +532,7 @@ export const downloadContentFromMessage = async (
 	opts: MediaDownloadOptions = {}
 ) => {
 	const isValidMediaUrl = url?.startsWith('https://mmg.whatsapp.net/')
-	const downloadUrl = isValidMediaUrl ? url : getUrlFromDirectPath(directPath!)
+	const downloadUrl = isValidMediaUrl ? url : getUrlFromDirectPath(directPath ?? '')
 	if (!downloadUrl) {
 		throw new Boom('No valid media URL or directPath present in message', { statusCode: 400 })
 	}
@@ -591,8 +595,8 @@ export const downloadEncryptedContent = async (
 
 	const pushBytes = (bytes: Buffer, push: (bytes: Buffer) => void) => {
 		if (startByte || endByte) {
-			const start = bytesFetched >= startByte! ? undefined : Math.max(startByte! - bytesFetched, 0)
-			const end = bytesFetched + bytes.length < endByte! ? undefined : Math.max(endByte! - bytesFetched, 0)
+			const start = bytesFetched >= (startByte ?? 0) ? undefined : Math.max((startByte ?? 0) - bytesFetched, 0)
+			const end = bytesFetched + bytes.length < (endByte ?? 0) ? undefined : Math.max((endByte ?? 0) - bytesFetched, 0)
 
 			push(bytes.slice(start, end))
 
@@ -652,7 +656,7 @@ export function extensionForMediaMessage(message: WAMessageContent) {
 		extension = '.jpeg'
 	} else {
 		const messageContent = message[type] as WAGenericMediaMessage
-		extension = getExtension(messageContent.mimetype!)!
+		extension = getExtension(messageContent.mimetype ?? '') ?? ''
 	}
 
 	return extension
@@ -860,8 +864,8 @@ export const getWAUploadToServer = (
 
 				if (result?.url || result?.direct_path) {
 					urls = {
-						mediaUrl: result.url!,
-						directPath: result.direct_path!,
+						mediaUrl: result.url ?? '',
+						directPath: result.direct_path ?? '',
 						meta_hmac: result.meta_hmac,
 						fbid: result.fbid,
 						ts: result.ts
@@ -896,17 +900,25 @@ const getMediaRetryKey = (mediaKey: Buffer | Uint8Array) => {
  * Generate a binary node that will request the phone to re-upload the media & return the newly uploaded URL
  */
 export const encryptMediaRetryRequest = (key: WAMessageKey, mediaKey: Buffer | Uint8Array, meId: string) => {
+	if (!key.id) {
+		throw new Boom('Missing message ID for media retry request')
+	}
+
+	if (!key.remoteJid) {
+		throw new Boom('Missing remote JID for media retry request')
+	}
+
 	const recp: proto.IServerErrorReceipt = { stanzaId: key.id }
 	const recpBuffer = proto.ServerErrorReceipt.encode(recp).finish()
 
 	const iv = Crypto.randomBytes(12)
 	const retryKey = getMediaRetryKey(mediaKey)
-	const ciphertext = aesEncryptGCM(recpBuffer, retryKey, iv, Buffer.from(key.id!))
+	const ciphertext = aesEncryptGCM(recpBuffer, retryKey, iv, Buffer.from(key.id))
 
 	const req: BinaryNode = {
 		tag: 'receipt',
 		attrs: {
-			id: key.id!,
+			id: key.id,
 			to: jidNormalizedUser(meId),
 			type: 'server-error'
 		},
@@ -925,7 +937,7 @@ export const encryptMediaRetryRequest = (key: WAMessageKey, mediaKey: Buffer | U
 			{
 				tag: 'rmr',
 				attrs: {
-					jid: key.remoteJid!,
+					jid: key.remoteJid,
 					from_me: (!!key.fromMe).toString(),
 					// @ts-ignore
 					participant: key.participant || undefined
@@ -938,7 +950,10 @@ export const encryptMediaRetryRequest = (key: WAMessageKey, mediaKey: Buffer | U
 }
 
 export const decodeMediaRetryNode = (node: BinaryNode) => {
-	const rmrNode = getBinaryNodeChild(node, 'rmr')!
+	const rmrNode = getBinaryNodeChild(node, 'rmr')
+	if (!rmrNode) {
+		throw new Boom('Missing rmr node in media retry response')
+	}
 
 	const event: BaileysEventMap['messages.media-update'][number] = {
 		key: {
@@ -951,7 +966,7 @@ export const decodeMediaRetryNode = (node: BinaryNode) => {
 
 	const errorNode = getBinaryNodeChild(node, 'error')
 	if (errorNode) {
-		const errorCode = +errorNode.attrs.code!
+		const errorCode = +(errorNode.attrs.code ?? '0')
 		event.error = new Boom(`Failed to re-upload media (${errorCode})`, {
 			data: errorNode.attrs,
 			statusCode: getStatusCodeForMediaRetry(errorCode)

@@ -194,9 +194,13 @@ export const processHistoryMessage = (item: proto.IHistorySync) => {
 		case proto.HistorySync.HistorySyncType.RECENT:
 		case proto.HistorySync.HistorySyncType.FULL:
 		case proto.HistorySync.HistorySyncType.ON_DEMAND:
-			for (const chat of item.conversations! as Chat[]) {
+			for (const chat of (item.conversations ?? []) as Chat[]) {
+				if (!chat.id) {
+					continue
+				}
+
 				contacts.push({
-					id: chat.id!,
+					id: chat.id,
 					name: chat.name || undefined,
 					lid: chat.lidJid || undefined,
 					phoneNumber: chat.pnJid || undefined
@@ -204,7 +208,7 @@ export const processHistoryMessage = (item: proto.IHistorySync) => {
 
 				// Source 2: Extract from conversation metadata
 				addLidPnMapping(
-					extractLidPnFromConversation(chat.id!, chat.lidJid, chat.pnJid)
+					extractLidPnFromConversation(chat.id, chat.lidJid, chat.pnJid)
 				)
 
 				const msgs = chat.messages || []
@@ -242,7 +246,7 @@ export const processHistoryMessage = (item: proto.IHistorySync) => {
 						message.messageStubParameters?.[0]
 					) {
 						contacts.push({
-							id: message.key.participant || message.key.remoteJid!,
+							id: message.key.participant || message.key.remoteJid || '',
 							verifiedName: message.messageStubParameters?.[0]
 						})
 					}
@@ -253,8 +257,12 @@ export const processHistoryMessage = (item: proto.IHistorySync) => {
 
 			break
 		case proto.HistorySync.HistorySyncType.PUSH_NAME:
-			for (const c of item.pushnames!) {
-				contacts.push({ id: c.id!, notify: c.pushname! })
+			for (const c of item.pushnames ?? []) {
+				if (!c.id) {
+					continue
+				}
+
+				contacts.push({ id: c.id, notify: c.pushname ?? '' })
 			}
 
 			break

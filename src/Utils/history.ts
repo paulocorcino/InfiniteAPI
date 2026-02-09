@@ -293,8 +293,8 @@ export const processHistoryMessage = (item: proto.IHistorySync, logger?: ILogger
 		case proto.HistorySync.HistorySyncType.RECENT:
 		case proto.HistorySync.HistorySyncType.FULL:
 		case proto.HistorySync.HistorySyncType.ON_DEMAND:
-			for (const chat of item.conversations! as Chat[]) {
-				const chatId = chat.id!
+			for (const chat of (item.conversations ?? []) as Chat[]) {
+				const chatId = chat.id ?? ''
 
 				// Source 2: Extract LID-PN mapping from conversation object
 				// This handles cases where the mapping isn't in phoneNumberToLidMappings
@@ -328,7 +328,8 @@ export const processHistoryMessage = (item: proto.IHistorySync, logger?: ILogger
 				delete chat.messages
 
 				for (const item of msgs) {
-					const message = item.message! as WAMessage
+					if (!item.message) continue
+					const message = item.message as WAMessage
 					messages.push(message)
 
 					// Source 3: Extract LID-PN mapping from message's alternative JID fields
@@ -358,7 +359,7 @@ export const processHistoryMessage = (item: proto.IHistorySync, logger?: ILogger
 						message.messageStubParameters?.[0]
 					) {
 						contacts.push({
-							id: message.key.participant || message.key.remoteJid!,
+							id: message.key.participant || message.key.remoteJid || '',
 							verifiedName: message.messageStubParameters?.[0]
 						})
 					}
@@ -369,8 +370,8 @@ export const processHistoryMessage = (item: proto.IHistorySync, logger?: ILogger
 
 			break
 		case proto.HistorySync.HistorySyncType.PUSH_NAME:
-			for (const c of item.pushnames!) {
-				contacts.push({ id: c.id!, notify: c.pushname! })
+			for (const c of (item.pushnames ?? [])) {
+				contacts.push({ id: c.id ?? '', notify: c.pushname ?? '' })
 			}
 
 			break
@@ -424,7 +425,7 @@ export const downloadAndProcessHistorySyncNotification = async (
  */
 export const getHistoryMsg = (message: proto.IMessage) => {
 	const normalizedContent = !!message ? normalizeMessageContent(message) : undefined
-	const anyHistoryMsg = normalizedContent?.protocolMessage?.historySyncNotification!
+	const anyHistoryMsg = normalizedContent?.protocolMessage?.historySyncNotification
 
 	return anyHistoryMsg
 }

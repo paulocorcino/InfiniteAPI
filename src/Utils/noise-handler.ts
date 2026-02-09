@@ -150,7 +150,7 @@ export const makeNoiseHandler = ({
 		while (true) {
 			if (inBytes.length < 3) return
 
-			size = (inBytes[0]! << 16) | (inBytes[1]! << 8) | inBytes[2]!
+			size = (inBytes[0] << 16) | (inBytes[1] << 8) | inBytes[2]
 
 			if (inBytes.length < size + 3) return
 
@@ -180,13 +180,25 @@ export const makeNoiseHandler = ({
 		mixIntoKey,
 		finishInit,
 		processHandshake: ({ serverHello }: proto.HandshakeMessage, noiseKey: KeyPair) => {
-			authenticate(serverHello!.ephemeral!)
-			mixIntoKey(Curve.sharedKey(privateKey, serverHello!.ephemeral!))
+			if (!serverHello?.ephemeral) {
+				throw new Boom('Missing server hello ephemeral', { statusCode: 500 })
+			}
 
-			const decStaticContent = decrypt(serverHello!.static!)
+			if (!serverHello?.static) {
+				throw new Boom('Missing server hello static', { statusCode: 500 })
+			}
+
+			if (!serverHello?.payload) {
+				throw new Boom('Missing server hello payload', { statusCode: 500 })
+			}
+
+			authenticate(serverHello.ephemeral)
+			mixIntoKey(Curve.sharedKey(privateKey, serverHello.ephemeral))
+
+			const decStaticContent = decrypt(serverHello.static)
 			mixIntoKey(Curve.sharedKey(privateKey, decStaticContent))
 
-			const certDecoded = decrypt(serverHello!.payload!)
+			const certDecoded = decrypt(serverHello.payload)
 
 			const { intermediate: certIntermediate, leaf } = proto.CertChain.decode(certDecoded)
 			// leaf
@@ -202,7 +214,11 @@ export const makeNoiseHandler = ({
 
 			const { issuerSerial } = details
 
-			const verify = Curve.verify(details.key!, leaf.details, leaf.signature)
+			if (!details.key) {
+				throw new Boom('Missing certificate key', { statusCode: 500 })
+			}
+
+			const verify = Curve.verify(details.key, leaf.details, leaf.signature)
 
 			const verifyIntermediate = Curve.verify(
 				WA_CERT_DETAILS.PUBLIC_KEY,
@@ -223,7 +239,7 @@ export const makeNoiseHandler = ({
 			}
 
 			const keyEnc = encrypt(noiseKey.public)
-			mixIntoKey(Curve.sharedKey(noiseKey.private, serverHello!.ephemeral!))
+			mixIntoKey(Curve.sharedKey(noiseKey.private, serverHello.ephemeral))
 
 			return keyEnc
 		},

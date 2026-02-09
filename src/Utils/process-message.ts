@@ -59,32 +59,40 @@ const REAL_MSG_REQ_ME_STUB_TYPES = new Set([WAMessageStubType.GROUP_PARTICIPANT_
 /** Cleans a received message to further processing */
 export const cleanMessage = (message: WAMessage, meId: string, meLid: string) => {
 	// ensure remoteJid and participant doesn't have device or agent in it
-	if (isHostedPnUser(message.key.remoteJid!) || isHostedLidUser(message.key.remoteJid!)) {
+	const remoteJid = message.key.remoteJid ?? ''
+	if (isHostedPnUser(remoteJid) || isHostedLidUser(remoteJid)) {
 		message.key.remoteJid = jidEncode(
-			jidDecode(message.key?.remoteJid!)?.user!,
-			isHostedPnUser(message.key.remoteJid!) ? 's.whatsapp.net' : 'lid'
+			jidDecode(remoteJid)?.user ?? '',
+			isHostedPnUser(remoteJid) ? 's.whatsapp.net' : 'lid'
 		)
 	} else {
-		message.key.remoteJid = jidNormalizedUser(message.key.remoteJid!)
+		message.key.remoteJid = jidNormalizedUser(remoteJid)
 	}
 
-	if (isHostedPnUser(message.key.participant!) || isHostedLidUser(message.key.participant!)) {
+	const participantJid = message.key.participant ?? ''
+	if (isHostedPnUser(participantJid) || isHostedLidUser(participantJid)) {
 		message.key.participant = jidEncode(
-			jidDecode(message.key.participant!)?.user!,
-			isHostedPnUser(message.key.participant!) ? 's.whatsapp.net' : 'lid'
+			jidDecode(participantJid)?.user ?? '',
+			isHostedPnUser(participantJid) ? 's.whatsapp.net' : 'lid'
 		)
 	} else {
-		message.key.participant = jidNormalizedUser(message.key.participant!)
+		message.key.participant = jidNormalizedUser(participantJid)
 	}
 
 	const content = normalizeMessageContent(message.message)
 	// if the message has a reaction, ensure fromMe & remoteJid are from our perspective
 	if (content?.reactionMessage) {
-		normaliseKey(content.reactionMessage.key!)
+		const reactionKey = content.reactionMessage.key
+		if (reactionKey) {
+			normaliseKey(reactionKey)
+		}
 	}
 
 	if (content?.pollUpdateMessage) {
-		normaliseKey(content.pollUpdateMessage.pollCreationMessageKey!)
+		const pollCreationKey = content.pollUpdateMessage.pollCreationMessageKey
+		if (pollCreationKey) {
+			normaliseKey(pollCreationKey)
+		}
 	}
 
 	function normaliseKey(msgKey: WAMessageKey) {
@@ -94,8 +102,8 @@ export const cleanMessage = (message: WAMessage, meId: string, meLid: string) =>
 			// if the sender believed the message being reacted to is not from them
 			// we've to correct the key to be from them, or some other participant
 			msgKey.fromMe = !msgKey.fromMe
-				? areJidsSameUser(msgKey.participant || msgKey.remoteJid!, meId) ||
-					areJidsSameUser(msgKey.participant || msgKey.remoteJid!, meLid)
+				? areJidsSameUser(msgKey.participant || (msgKey.remoteJid ?? ''), meId) ||
+					areJidsSameUser(msgKey.participant || (msgKey.remoteJid ?? ''), meLid)
 				: // if the message being reacted to, was from them
 					// fromMe automatically becomes false
 					false
@@ -150,10 +158,11 @@ export const normalizeMessageJids = async (
 export const isRealMessage = (message: WAMessage) => {
 	const normalizedContent = normalizeMessageContent(message.message)
 	const hasSomeContent = !!getContentType(normalizedContent)
+	const stubType = message.messageStubType ?? 0
 	return (
 		(!!normalizedContent ||
-			REAL_MSG_STUB_TYPES.has(message.messageStubType!) ||
-			REAL_MSG_REQ_ME_STUB_TYPES.has(message.messageStubType!)) &&
+			REAL_MSG_STUB_TYPES.has(stubType) ||
+			REAL_MSG_REQ_ME_STUB_TYPES.has(stubType)) &&
 		hasSomeContent &&
 		!normalizedContent?.protocolMessage &&
 		!normalizedContent?.reactionMessage &&
@@ -168,11 +177,12 @@ export const shouldIncrementChatUnread = (message: WAMessage) => !message.key.fr
  * Typically -- that'll be the remoteJid, but for broadcasts, it'll be the participant
  */
 export const getChatId = ({ remoteJid, participant, fromMe }: WAMessageKey) => {
-	if (isJidBroadcast(remoteJid!) && !isJidStatusBroadcast(remoteJid!) && !fromMe) {
-		return participant!
+	const jid = remoteJid ?? ''
+	if (isJidBroadcast(jid) && !isJidStatusBroadcast(jid) && !fromMe) {
+		return participant ?? ''
 	}
 
-	return remoteJid!
+	return jid
 }
 
 type PollContext = {
@@ -219,7 +229,11 @@ export function decryptPollVote(
 	const decKey = hmacSign(sign, key0, 'sha256')
 	const aad = toBinary(`${pollMsgId}\u0000${voterJid}`)
 
-	const decrypted = aesDecryptGCM(encPayload!, decKey, encIv!, aad)
+	if (!encPayload || !encIv) {
+		throw new Error('Missing encPayload or encIv for poll vote decryption')
+	}
+
+	const decrypted = aesDecryptGCM(encPayload, decKey, encIv, aad)
 	return proto.Message.PollVoteMessage.decode(decrypted)
 
 	function toBinary(txt: string) {
@@ -249,7 +263,11 @@ export function decryptEventResponse(
 	const decKey = hmacSign(sign, key0, 'sha256')
 	const aad = toBinary(`${eventMsgId}\u0000${responderJid}`)
 
-	const decrypted = aesDecryptGCM(encPayload!, decKey, encIv!, aad)
+	if (!encPayload || !encIv) {
+		throw new Error('Missing encPayload or encIv for event response decryption')
+	}
+
+	const decrypted = aesDecryptGCM(encPayload, decKey, encIv, aad)
 	return proto.Message.EventResponseMessage.decode(decrypted)
 
 	function toBinary(txt: string) {
@@ -271,7 +289,12 @@ const processMessage = async (
 		getMessage
 	}: ProcessMessageContext
 ) => {
-	const meId = creds.me!.id
+	const meUser = creds.me
+	if (!meUser) {
+		return
+	}
+
+	const meId = meUser.id
 	const { accountSettings } = creds
 
 	const chat: Partial<Chat> = { id: jidNormalizedUser(getChatId(message.key)) }
@@ -299,7 +322,10 @@ const processMessage = async (
 	if (protocolMsg) {
 		switch (protocolMsg.type) {
 			case proto.Message.ProtocolMessage.Type.HISTORY_SYNC_NOTIFICATION:
-				const histNotification = protocolMsg.historySyncNotification!
+				const histNotification = protocolMsg.historySyncNotification
+				if (!histNotification) {
+					break
+				}
 				const process = shouldProcessHistoryMsg
 				const isLatest = !creds.processedHistoryMessages?.length
 
@@ -366,16 +392,23 @@ const processMessage = async (
 
 				break
 			case proto.Message.ProtocolMessage.Type.APP_STATE_SYNC_KEY_SHARE:
-				const keys = protocolMsg.appStateSyncKeyShare!.keys
+				const keys = protocolMsg.appStateSyncKeyShare?.keys
 				if (keys?.length) {
 					let newAppStateSyncKeyId = ''
 					await keyStore.transaction(async () => {
 						const newKeys: string[] = []
 						for (const { keyData, keyId } of keys) {
-							const strKeyId = Buffer.from(keyId!.keyId!).toString('base64')
+							const keyIdValue = keyId?.keyId
+							if (!keyIdValue) {
+								continue
+							}
+
+							const strKeyId = Buffer.from(keyIdValue).toString('base64')
 							newKeys.push(strKeyId)
 
-							await keyStore.set({ 'app-state-sync-key': { [strKeyId]: keyData! } })
+							if (keyData) {
+								await keyStore.set({ 'app-state-sync-key': { [strKeyId]: keyData } })
+							}
 
 							newAppStateSyncKeyId = strKeyId
 						}
@@ -394,7 +427,7 @@ const processMessage = async (
 					{
 						key: {
 							...message.key,
-							id: protocolMsg.key!.id
+							id: protocolMsg.key?.id
 						},
 						update: { message: null, messageStubType: WAMessageStubType.REVOKE, key: message.key }
 					}
@@ -407,17 +440,27 @@ const processMessage = async (
 				})
 				break
 			case proto.Message.ProtocolMessage.Type.PEER_DATA_OPERATION_REQUEST_RESPONSE_MESSAGE:
-				const response = protocolMsg.peerDataOperationRequestResponseMessage!
+				const response = protocolMsg.peerDataOperationRequestResponseMessage
 				if (response) {
-					await placeholderResendCache?.del(response.stanzaId!)
+					if (response.stanzaId) {
+						await placeholderResendCache?.del(response.stanzaId)
+					}
 					// TODO: IMPLEMENT HISTORY SYNC ETC (sticker uploads etc.).
 					const { peerDataOperationResult } = response
+					if (!peerDataOperationResult) {
+						break
+					}
+
 					let recoveredCount = 0
-					for (const result of peerDataOperationResult!) {
+					for (const result of peerDataOperationResult) {
 						const { placeholderMessageResendResponse: retryResponse } = result
 						//eslint-disable-next-line max-depth
 						if (retryResponse) {
-							const webMessageInfo = proto.WebMessageInfo.decode(retryResponse.webMessageInfoBytes!)
+							if (!retryResponse.webMessageInfoBytes) {
+								continue
+							}
+
+							const webMessageInfo = proto.WebMessageInfo.decode(retryResponse.webMessageInfoBytes)
 
 							// Track CTWA message recovery success
 							recoveredCount++
@@ -435,7 +478,7 @@ const processMessage = async (
 							ev.emit('messages.upsert', {
 								messages: [webMessageInfo as WAMessage],
 								type: 'notify',
-								requestId: response.stanzaId!
+								requestId: response.stanzaId ?? ''
 							})
 						}
 					}
@@ -474,17 +517,21 @@ const processMessage = async (
 				const labelAssociationMsg = protocolMsg.memberLabel
 				if (labelAssociationMsg?.label) {
 					ev.emit('group.member-tag.update', {
-						groupId: chat.id!,
+						groupId: chat.id ?? '',
 						label: labelAssociationMsg.label,
-						participant: message.key.participant!,
-						participantAlt: message.key.participantAlt!,
+						participant: message.key.participant ?? '',
+						participantAlt: message.key.participantAlt ?? '',
 						messageTimestamp: Number(message.messageTimestamp)
 					})
 				}
 
 				break
 			case proto.Message.ProtocolMessage.Type.LID_MIGRATION_MAPPING_SYNC:
-				const encodedPayload = protocolMsg.lidMigrationMappingSyncMessage?.encodedMappingPayload!
+				const encodedPayload = protocolMsg.lidMigrationMappingSyncMessage?.encodedMappingPayload
+				if (!encodedPayload) {
+					break
+				}
+
 				const { pnToLidMappings, chatDbMigrationTimestamp } =
 					proto.LIDMigrationMappingSyncPayload.decode(encodedPayload)
 				logger?.debug({ pnToLidMappings, chatDbMigrationTimestamp }, 'got lid mappings and chat db migration timestamp')
@@ -502,6 +549,11 @@ const processMessage = async (
 				}
 		}
 	} else if (content?.reactionMessage) {
+		const reactionKey = content.reactionMessage.key
+		if (!reactionKey) {
+			return
+		}
+
 		const reaction: proto.IReaction = {
 			...content.reactionMessage,
 			key: message.key
@@ -509,12 +561,15 @@ const processMessage = async (
 		ev.emit('messages.reaction', [
 			{
 				reaction,
-				key: content.reactionMessage?.key!
+				key: reactionKey
 			}
 		])
 	} else if (content?.encEventResponseMessage) {
 		const encEventResponse = content.encEventResponseMessage
-		const creationMsgKey = encEventResponse.eventCreationMessageKey!
+		const creationMsgKey = encEventResponse.eventCreationMessageKey
+		if (!creationMsgKey) {
+			return
+		}
 
 		// we need to fetch the event creation message to get the event enc key
 		const eventMsg = await getMessage(creationMsgKey)
@@ -523,12 +578,16 @@ const processMessage = async (
 				const meIdNormalised = jidNormalizedUser(meId)
 
 				// all jids need to be PN
-				const eventCreatorKey = creationMsgKey.participant || creationMsgKey.remoteJid!
+				const eventCreatorKey = creationMsgKey.participant || (creationMsgKey.remoteJid ?? '')
 				const eventCreatorPn = isLidUser(eventCreatorKey)
 					? await signalRepository.lidMapping.getPNForLID(eventCreatorKey)
 					: eventCreatorKey
+				if (!eventCreatorPn) {
+					return
+				}
+
 				const eventCreatorJid = getKeyAuthor(
-					{ remoteJid: jidNormalizedUser(eventCreatorPn!), fromMe: meIdNormalised === eventCreatorPn },
+					{ remoteJid: jidNormalizedUser(eventCreatorPn), fromMe: meIdNormalised === eventCreatorPn },
 					meIdNormalised
 				)
 
@@ -541,7 +600,7 @@ const processMessage = async (
 					const responseMsg = decryptEventResponse(encEventResponse, {
 						eventEncKey,
 						eventCreatorJid,
-						eventMsgId: creationMsgKey.id!,
+						eventMsgId: creationMsgKey.id ?? '',
 						responderJid
 					})
 

@@ -272,9 +272,12 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		for (const section of getBinaryNodeChildren(botNode, 'section')) {
 			if (section.attrs.type === 'all') {
 				for (const bot of getBinaryNodeChildren(section, 'bot')) {
+					const jid = bot.attrs.jid
+					const personaId = bot.attrs['persona_id']
+					if (!jid || !personaId) continue
 					botList.push({
-						jid: bot.attrs.jid!,
-						personaId: bot.attrs['persona_id']!
+						jid,
+						personaId
 					})
 				}
 			}
@@ -322,7 +325,9 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			)
 		}
 
-		if (jidNormalizedUser(jid) !== jidNormalizedUser(authState.creds.me!.id)) {
+		const me = authState.creds.me
+		if (!me) throw new Boom('Not authenticated', { statusCode: 401 })
+		if (jidNormalizedUser(jid) !== jidNormalizedUser(me.id)) {
 			targetJid = jidNormalizedUser(jid) // in case it is someone other than us
 		} else {
 			targetJid = undefined
@@ -356,7 +361,9 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			)
 		}
 
-		if (jidNormalizedUser(jid) !== jidNormalizedUser(authState.creds.me!.id)) {
+		const me = authState.creds.me
+		if (!me) throw new Boom('Not authenticated', { statusCode: 401 })
+		if (jidNormalizedUser(jid) !== jidNormalizedUser(me.id)) {
 			targetJid = jidNormalizedUser(jid) // in case it is someone other than us
 		} else {
 			targetJid = undefined
@@ -505,10 +512,12 @@ export const makeChatsSocket = (config: SocketConfig) => {
 	const newAppStateChunkHandler = (isInitialSync: boolean) => {
 		return {
 			onMutation(mutation: ChatMutation) {
+				const me = authState.creds.me
+				if (!me) throw new Boom('Not authenticated', { statusCode: 401 })
 				processSyncAction(
 					mutation,
 					ev,
-					authState.creds.me!,
+					me,
 					isInitialSync ? { accountSettings: authState.creds.accountSettings } : undefined,
 					logger
 				)
@@ -630,7 +639,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 							// if retry attempts overshoot
 							// or key not found
 							const isIrrecoverableError =
-								attemptsMap[name]! >= MAX_SYNC_ATTEMPTS ||
+								(attemptsMap[name] || 0) >= MAX_SYNC_ATTEMPTS ||
 								error.output?.statusCode === 404 ||
 								error.name === 'TypeError'
 							logger.info(
@@ -652,7 +661,9 @@ export const makeChatsSocket = (config: SocketConfig) => {
 
 			const { onMutation } = newAppStateChunkHandler(isInitialSync)
 			for (const key in globalMutationMap) {
-				onMutation(globalMutationMap[key]!)
+				const mutation = globalMutationMap[key]
+				if (!mutation) continue
+				onMutation(mutation)
 			}
 		}
 	)
@@ -708,7 +719,8 @@ export const makeChatsSocket = (config: SocketConfig) => {
 	}
 
 	const sendPresenceUpdate = async (type: WAPresence, toJid?: string) => {
-		const me = authState.creds.me!
+		const me = authState.creds.me
+		if (!me) throw new Boom('Not authenticated', { statusCode: 401 })
 		if (type === 'available' || type === 'unavailable') {
 			if (!me.name) {
 				logger.warn('no name present, ignoring presence update request...')
@@ -733,14 +745,17 @@ export const makeChatsSocket = (config: SocketConfig) => {
 				})
 			}
 		} else {
-			const { server } = jidDecode(toJid)!
+			if (!toJid) return
+			const decoded = jidDecode(toJid)
+			if (!decoded) return
+			const { server } = decoded
 			const isLid = server === 'lid'
 
 			await sendNode({
 				tag: 'chatstate',
 				attrs: {
-					from: isLid ? me.lid! : me.id,
-					to: toJid!
+					from: isLid ? (me.lid || me.id) : me.id,
+					to: toJid
 				},
 				content: [
 					{
@@ -774,8 +789,9 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		let presence: PresenceData | undefined
 		const jid = attrs.from
 		const participant = attrs.participant || attrs.from
+		if (!jid) return
 
-		if (shouldIgnoreJid(jid!) && jid !== S_WHATSAPP_NET) {
+		if (shouldIgnoreJid(jid) && jid !== S_WHATSAPP_NET) {
 			return
 		}
 
@@ -786,12 +802,13 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			}
 		} else if (Array.isArray(content)) {
 			const [firstChild] = content
-			let type = firstChild!.tag as WAPresence
+			if (!firstChild) return
+			let type = firstChild.tag as WAPresence
 			if (type === 'paused') {
 				type = 'available'
 			}
 
-			if (firstChild!.attrs?.media === 'audio') {
+			if (firstChild.attrs?.media === 'audio') {
 				type = 'recording'
 			}
 
@@ -801,7 +818,8 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		}
 
 		if (presence) {
-			ev.emit('presence.update', { id: jid!, presences: { [participant!]: presence } })
+			if (!participant) return
+			ev.emit('presence.update', { id: jid, presences: { [participant]: presence } })
 		}
 	}
 
@@ -868,8 +886,8 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			const { onMutation } = newAppStateChunkHandler(false)
 			const { mutationMap } = await decodePatches(
 				name,
-				[{ ...encodeResult!.patch, version: { version: encodeResult!.state.version } }],
-				initial!,
+				[{ ...encodeResult?.patch, version: { version: encodeResult?.state?.version } }],
+				initial ?? { version: 0, hash: Buffer.alloc(0), indexValueMap: {} },
 				getAppStateSyncKey,
 				config.options,
 				undefined,
@@ -1089,8 +1107,8 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		ev.emit('messages.upsert', { messages: [msg], type })
 
 		if (!!msg.pushName) {
-			let jid = msg.key.fromMe ? authState.creds.me!.id : msg.key.participant || msg.key.remoteJid
-			jid = jidNormalizedUser(jid!)
+			let jid = msg.key.fromMe ? (authState.creds.me?.id ?? '') : msg.key.participant || msg.key.remoteJid
+			jid = jidNormalizedUser(jid ?? '')
 
 			if (!msg.key.fromMe) {
 				ev.emit('contacts.update', [{ id: jid, notify: msg.pushName, verifiedName: msg.verifiedBizName! }])

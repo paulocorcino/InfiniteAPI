@@ -118,14 +118,18 @@ export const makeBusinessSocket = (config: SocketConfig) => {
 					content: [
 						{
 							tag: 'cover_photo',
-							attrs: { id: String(fbid), op: 'update', token: meta_hmac!, ts: String(ts) }
+							attrs: { id: String(fbid), op: 'update', token: meta_hmac ?? '', ts: String(ts) }
 						}
 					]
 				}
 			]
 		})
 
-		return fbid!
+		if (!fbid) {
+			throw new Error('Cover photo upload failed: missing fbid')
+		}
+
+		return fbid
 	}
 
 	const removeCoverPhoto = async (id: string) => {
@@ -332,7 +336,11 @@ export const makeBusinessSocket = (config: SocketConfig) => {
 		const productCatalogEditNode = getBinaryNodeChild(result, 'product_catalog_edit')
 		const productNode = getBinaryNodeChild(productCatalogEditNode, 'product')
 
-		return parseProductNode(productNode!)
+		if (!productNode) {
+			throw new Error('Product node not found in catalog edit response')
+		}
+
+		return parseProductNode(productNode)
 	}
 
 	const productCreate = async (create: ProductCreate) => {
@@ -372,7 +380,11 @@ export const makeBusinessSocket = (config: SocketConfig) => {
 		const productCatalogAddNode = getBinaryNodeChild(result, 'product_catalog_add')
 		const productNode = getBinaryNodeChild(productCatalogAddNode, 'product')
 
-		return parseProductNode(productNode!)
+		if (!productNode) {
+			throw new Error('Product node not found in catalog add response')
+		}
+
+		return parseProductNode(productNode)
 	}
 
 	const productDelete = async (productIds: string[]) => {

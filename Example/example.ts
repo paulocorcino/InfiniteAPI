@@ -149,11 +149,11 @@ const startSock = async() => {
 
               // go to an old chat and send this
               if (text == "onDemandHistSync") {
-                const messageId = await sock.fetchMessageHistory(50, msg.key, msg.messageTimestamp!)
+                const messageId = await sock.fetchMessageHistory(50, msg.key, msg.messageTimestamp ?? 0)
                 logger.debug({ id: messageId }, 'requested on-demand history resync')
               }
 
-              if (!msg.key.fromMe && doReplies && !isJidNewsletter(msg.key?.remoteJid!)) {
+              if (!msg.key.fromMe && doReplies && !isJidNewsletter(msg.key?.remoteJid ?? '')) {
               	const id = generateMessageIDV2(sock.user?.id)
               	logger.debug({id, orig_id: msg.key.id }, 'replying to message')
                 await sock.sendMessage(msg.key.remoteJid!, { text: 'pong '+msg.key.id }, {messageId: id })
@@ -208,7 +208,7 @@ const startSock = async() => {
 					if(typeof contact.imgUrl !== 'undefined') {
 						const newUrl = contact.imgUrl === null
 							? null
-							: await sock!.profilePictureUrl(contact.id!).catch(() => null)
+							: await sock.profilePictureUrl(contact.id ?? '').catch(() => null)
 						logger.debug({id: contact.id, newUrl}, `contact has a new profile pic` )
 					}
 				}

@@ -56,7 +56,7 @@ export const isStringNullOrEmpty = (value: string | null | undefined): value is 
 
 export const writeRandomPadMax16 = (msg: Uint8Array) => {
 	const pad = randomBytes(1)
-	const padLength = (pad[0]! & 0x0f) + 1
+	const padLength = ((pad[0] ?? 0) & 0x0f) + 1
 
 	return Buffer.concat([msg, Buffer.alloc(padLength, padLength)])
 }
@@ -67,7 +67,7 @@ export const unpadRandomMax16 = (e: Uint8Array | Buffer) => {
 		throw new Error('unpadPkcs7 given empty bytes')
 	}
 
-	var r = t[t.length - 1]!
+	var r = t[t.length - 1] ?? 0
 	if (r > t.length) {
 		throw new Error(`unpad given ${t.length} bytes, but pad is ${r}`)
 	}
@@ -85,7 +85,7 @@ export const generateParticipantHashV2 = (participants: string[]): string => {
 export const encodeWAMessage = (message: proto.IMessage) => writeRandomPadMax16(proto.Message.encode(message).finish())
 
 export const generateRegistrationId = (): number => {
-	return Uint16Array.from(randomBytes(2))[0]! & 16383
+	return (Uint16Array.from(randomBytes(2))[0] ?? 0) & 16383
 }
 
 export const encodeBigEndian = (e: number, t = 4) => {
@@ -246,10 +246,14 @@ export const fetchLatestBaileysVersion = async (options: RequestInit = {}) => {
 		// Extract version from line 7 (const version = [...])
 		const lines = text.split('\n')
 		const versionLine = lines[6] // Line 7 (0-indexed)
-		const versionMatch = versionLine!.match(/const version = \[(\d+),\s*(\d+),\s*(\d+)\]/)
+		if (!versionLine) {
+			throw new Error('Version line not found')
+		}
+
+		const versionMatch = versionLine.match(/const version = \[(\d+),\s*(\d+),\s*(\d+)\]/)
 
 		if (versionMatch) {
-			const version = [parseInt(versionMatch[1]!), parseInt(versionMatch[2]!), parseInt(versionMatch[3]!)] as WAVersion
+			const version = [parseInt(versionMatch[1] ?? '0'), parseInt(versionMatch[2] ?? '0'), parseInt(versionMatch[3] ?? '0')] as WAVersion
 
 			return {
 				version,
@@ -339,7 +343,7 @@ const STATUS_MAP: { [_: string]: proto.WebMessageInfo.Status } = {
  * @param type type from receipt
  */
 export const getStatusFromReceiptType = (type: string | undefined) => {
-	const status = STATUS_MAP[type!]
+	const status = STATUS_MAP[type ?? '']
 	if (typeof type === 'undefined') {
 		return proto.WebMessageInfo.Status.DELIVERY_ACK
 	}

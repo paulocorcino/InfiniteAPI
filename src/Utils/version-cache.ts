@@ -165,19 +165,19 @@ export async function getCachedVersion(
 	} = config
 
 	// 1. Check memory cache first (fastest)
-	if (isCacheValid(memoryCache, cacheTtlMs)) {
-		const age = Date.now() - memoryCache!.fetchedAt
+	if (isCacheValid(memoryCache, cacheTtlMs) && memoryCache) {
+		const age = Date.now() - memoryCache.fetchedAt
 		logger?.debug({ age: Math.round(age / 1000) + 's' }, 'Using memory cached version')
-		return { version: memoryCache!.version, fromCache: true, age, source: 'memory' }
+		return { version: memoryCache.version, fromCache: true, age, source: 'memory' }
 	}
 
 	// 2. Check file cache (survives restarts)
 	const fileCache = await readCacheFile(cacheFilePath)
-	if (isCacheValid(fileCache, cacheTtlMs)) {
+	if (isCacheValid(fileCache, cacheTtlMs) && fileCache) {
 		memoryCache = fileCache // Update memory cache
-		const age = Date.now() - fileCache!.fetchedAt
+		const age = Date.now() - fileCache.fetchedAt
 		logger?.debug({ age: Math.round(age / 1000) + 's' }, 'Using file cached version')
-		return { version: fileCache!.version, fromCache: true, age, source: 'file' }
+		return { version: fileCache.version, fromCache: true, age, source: 'file' }
 	}
 
 	// 3. Need to fetch - but deduplicate concurrent requests

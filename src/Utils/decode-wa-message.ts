@@ -127,6 +127,10 @@ export function decodeMessageNode(stanza: BinaryNode, meId: string, meLid: strin
 
 	const msgId = stanza.attrs.id
 	const from = stanza.attrs.from
+	if (!from) {
+		throw new Boom('Missing from attribute in message', { data: stanza })
+	}
+
 	const participant: string | undefined = stanza.attrs.participant
 	const recipient: string | undefined = stanza.attrs.recipient
 
@@ -137,21 +141,21 @@ export function decodeMessageNode(stanza: BinaryNode, meId: string, meLid: strin
 
 	if (isPnUser(from) || isLidUser(from) || isHostedLidUser(from) || isHostedPnUser(from)) {
 		if (recipient && !isJidMetaAI(recipient)) {
-			if (!isMe(from!) && !isMeLid(from!)) {
+			if (!isMe(from) && !isMeLid(from)) {
 				throw new Boom('receipient present, but msg not from me', { data: stanza })
 			}
 
-			if (isMe(from!) || isMeLid(from!)) {
+			if (isMe(from) || isMeLid(from)) {
 				fromMe = true
 			}
 
 			chatId = recipient
 		} else {
-			chatId = from!
+			chatId = from
 		}
 
 		msgType = 'chat'
-		author = from!
+		author = from
 	} else if (isJidGroup(from)) {
 		if (!participant) {
 			throw new Boom('No participant in group message')
@@ -163,28 +167,28 @@ export function decodeMessageNode(stanza: BinaryNode, meId: string, meLid: strin
 
 		msgType = 'group'
 		author = participant
-		chatId = from!
+		chatId = from
 	} else if (isJidBroadcast(from)) {
 		if (!participant) {
 			throw new Boom('No participant in group message')
 		}
 
 		const isParticipantMe = isMe(participant)
-		if (isJidStatusBroadcast(from!)) {
+		if (isJidStatusBroadcast(from)) {
 			msgType = isParticipantMe ? 'direct_peer_status' : 'other_status'
 		} else {
 			msgType = isParticipantMe ? 'peer_broadcast' : 'other_broadcast'
 		}
 
 		fromMe = isParticipantMe
-		chatId = from!
+		chatId = from
 		author = participant
 	} else if (isJidNewsletter(from)) {
 		msgType = 'newsletter'
-		chatId = from!
-		author = from!
+		chatId = from
+		author = from
 
-		if (isMe(from!) || isMeLid(from!)) {
+		if (isMe(from) || isMeLid(from)) {
 			fromMe = true
 		}
 	} else {
@@ -207,7 +211,7 @@ export function decodeMessageNode(stanza: BinaryNode, meId: string, meLid: strin
 	const fullMessage: WAMessage = {
 		key,
 		category: stanza.attrs.category,
-		messageTimestamp: +stanza.attrs.t!,
+		messageTimestamp: +(stanza.attrs.t ?? 0),
 		pushName: pushname,
 		broadcast: isJidBroadcast(from)
 	}
@@ -241,8 +245,10 @@ export const decryptMessageNode = (
 				for (const { tag, attrs, content } of stanza.content) {
 					if (tag === 'verified_name' && content instanceof Uint8Array) {
 						const cert = proto.VerifiedNameCertificate.decode(content)
-						const details = proto.VerifiedNameCertificate.Details.decode(cert.details!)
-						fullMessage.verifiedBizName = details.verifiedName
+						if (cert.details) {
+							const details = proto.VerifiedNameCertificate.Details.decode(cert.details)
+							fullMessage.verifiedBizName = details.verifiedName
+						}
 					}
 
 					if (tag === 'unavailable' && attrs.type === 'view_once') {

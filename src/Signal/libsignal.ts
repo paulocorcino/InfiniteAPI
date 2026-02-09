@@ -493,7 +493,12 @@ export function makeLibSignalRepository(
 				return { migrated: 0, skipped: 0, total: 1 }
 			}
 
-			const { user } = jidDecode(fromJid)!
+			const decoded1 = jidDecode(fromJid)
+			if (!decoded1) {
+				return { migrated: 0, skipped: 0, total: 0 }
+			}
+
+			const { user } = decoded1
 
 			logger.debug({ fromJid }, 'bulk device migration - loading all user devices')
 
@@ -503,7 +508,7 @@ export function makeLibSignalRepository(
 				return { migrated: 0, skipped: 0, total: 0 }
 			}
 
-			const { device: fromDevice } = jidDecode(fromJid)!
+			const { device: fromDevice } = decoded1
 			const fromDeviceStr = fromDevice?.toString() || '0'
 			if (!userDevices.includes(fromDeviceStr)) {
 				userDevices.push(fromDeviceStr)
@@ -562,8 +567,11 @@ export function makeLibSignalRepository(
 
 					const migrationOps: MigrationOp[] = deviceJids.map(jid => {
 						const lidWithDevice = transferDevice(jid, toJid)
-						const fromDecoded = jidDecode(jid)!
-						const toDecoded = jidDecode(lidWithDevice)!
+						const fromDecoded = jidDecode(jid)
+						const toDecoded = jidDecode(lidWithDevice)
+						if (!fromDecoded || !toDecoded) {
+							throw new Error(`Failed to decode JID during migration: ${jid} -> ${lidWithDevice}`)
+						}
 
 						return {
 							fromJid: jid,
@@ -630,7 +638,10 @@ export function makeLibSignalRepository(
 }
 
 const jidToSignalProtocolAddress = (jid: string): libsignal.ProtocolAddress => {
-	const decoded = jidDecode(jid)!
+	const decoded = jidDecode(jid)
+	if (!decoded) {
+		throw new Error(`Failed to decode JID: "${jid}"`)
+	}
 	const { user, device, server, domainType } = decoded
 
 	if (!user) {
@@ -688,12 +699,16 @@ function signalStorage(
 	const resolveLIDSignalAddress = async (id: string): Promise<string> => {
 		if (id.includes('.')) {
 			const [deviceId, device] = id.split('.')
-			const [user, domainType_] = deviceId!.split('_')
+			if (!deviceId) {
+				throw new Error('Missing device ID')
+			}
+
+			const [user, domainType_] = deviceId.split('_')
 			const domainType = parseInt(domainType_ || '0')
 
 			if (domainType === WAJIDDomains.LID || domainType === WAJIDDomains.HOSTED_LID) return id
 
-			const pnJid = `${user!}${device !== '0' ? `:${device}` : ''}@${domainType === WAJIDDomains.HOSTED ? 'hosted' : 's.whatsapp.net'}`
+			const pnJid = `${user ?? ''}${device !== '0' ? `:${device}` : ''}@${domainType === WAJIDDomains.HOSTED ? 'hosted' : 's.whatsapp.net'}`
 
 			const lidForPN = await lidMapping.getLIDForPN(pnJid)
 			if (lidForPN) {

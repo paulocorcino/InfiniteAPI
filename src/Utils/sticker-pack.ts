@@ -575,7 +575,7 @@ export const prepareStickerPackMessage = async (
 			duplicateCount++
 
 			// Merge emojis (deduplicate)
-			const mergedEmojis = Array.from(new Set([...existingMetadata.emojis!, ...emojis]))
+			const mergedEmojis = Array.from(new Set([...(existingMetadata.emojis ?? []), ...emojis]))
 			existingMetadata.emojis = mergedEmojis
 
 			// Merge accessibility labels (concatenate with separator if both exist)

@@ -88,14 +88,18 @@ export const xmppPreKey = (pair: KeyPair, id: number): BinaryNode => ({
 })
 
 export const parseAndInjectE2ESessions = async (node: BinaryNode, repository: SignalRepositoryWithLIDStore) => {
-	const extractKey = (key: BinaryNode) =>
-		key
-			? {
-					keyId: getBinaryNodeChildUInt(key, 'id', 3)!,
-					publicKey: generateSignalPubKey(getBinaryNodeChildBuffer(key, 'value')!),
-					signature: getBinaryNodeChildBuffer(key, 'signature')!
-				}
-			: undefined
+	const extractKey = (key: BinaryNode) => {
+		if (!key) return undefined
+		const keyId = getBinaryNodeChildUInt(key, 'id', 3)
+		const publicKeyBuf = getBinaryNodeChildBuffer(key, 'value')
+		const signature = getBinaryNodeChildBuffer(key, 'signature')
+		if (keyId === undefined || !publicKeyBuf || !signature) return undefined
+		return {
+			keyId,
+			publicKey: generateSignalPubKey(publicKeyBuf),
+			signature
+		}
+	}
 	const nodes = getBinaryNodeChildren(getBinaryNodeChild(node, 'list'), 'user')
 	for (const node of nodes) {
 		assertNodeErrorFree(node)
@@ -111,20 +115,26 @@ export const parseAndInjectE2ESessions = async (node: BinaryNode, repository: Si
 
 	for (const nodesChunk of chunks) {
 		for (const node of nodesChunk) {
-			const signedKey = getBinaryNodeChild(node, 'skey')!
-			const key = getBinaryNodeChild(node, 'key')!
-			const identity = getBinaryNodeChildBuffer(node, 'identity')!
-			const jid = node.attrs.jid!
+			const signedKey = getBinaryNodeChild(node, 'skey')
+			const key = getBinaryNodeChild(node, 'key')
+			const identity = getBinaryNodeChildBuffer(node, 'identity')
+			const jid = node.attrs.jid
+			if (!signedKey || !key || !identity || !jid) continue
 
 			const registrationId = getBinaryNodeChildUInt(node, 'registration', 4)
+			if (registrationId === undefined) continue
+
+			const signedPreKey = extractKey(signedKey)
+			const preKey = extractKey(key)
+			if (!signedPreKey || !preKey) continue
 
 			await repository.injectE2ESession({
 				jid,
 				session: {
-					registrationId: registrationId!,
+					registrationId,
 					identityKey: generateSignalPubKey(identity),
-					signedPreKey: extractKey(signedKey)!,
-					preKey: extractKey(key)!
+					signedPreKey,
+					preKey
 				}
 			})
 		}
@@ -137,14 +147,18 @@ export const extractDeviceJids = (
 	myLid: string,
 	excludeZeroDevices: boolean
 ) => {
-	const { user: myUser, device: myDevice } = jidDecode(myJid)!
+	const myJidDecoded = jidDecode(myJid)
+	if (!myJidDecoded) return []
+
+	const { user: myUser, device: myDevice } = myJidDecoded
 
 	const extracted: FullJid[] = []
 
 	for (const userResult of result) {
 		const { devices, id } = userResult as { devices: ParsedDeviceInfo; id: string }
-		const decoded = jidDecode(id)!,
-			{ user, server } = decoded
+		const decoded = jidDecode(id)
+		if (!decoded) continue
+		const { user, server } = decoded
 		let { domainType } = decoded
 		const deviceList = devices?.deviceList as DeviceListData[]
 		if (!Array.isArray(deviceList)) continue
