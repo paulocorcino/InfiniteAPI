@@ -19,7 +19,7 @@ import {
 	type MessageLabelAssociation
 } from '../Types/LabelAssociation'
 import { type BinaryNode, getBinaryNodeChild, getBinaryNodeChildren, isJidGroup, jidNormalizedUser } from '../WABinary'
-import { expandAppStateKeys } from 'whatsapp-rust-bridge'
+import { expandAppStateKeys } from './wasm-bridge'
 import { aesDecrypt, aesEncrypt, hmacSign } from './crypto'
 import { toNumber } from './generics'
 import type { ILogger } from './logger'
@@ -102,7 +102,7 @@ const makeLtHashGenerator = ({ indexValueMap, hash }: Pick<LTHashState, 'hash' |
 			}
 		},
 		finish: () => {
-			const result = LT_HASH_ANTI_TAMPERING.subtractThenAdd(new Uint8Array(hash), addBuffs, subBuffs)
+			const result = LT_HASH_ANTI_TAMPERING().subtractThenAdd(new Uint8Array(hash), addBuffs, subBuffs)
 
 			return {
 				hash: Buffer.from(result),

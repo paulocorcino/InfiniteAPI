@@ -118,7 +118,7 @@ export function sha256(buffer: Buffer) {
 	return createHash('sha256').update(buffer).digest()
 }
 
-export { hkdf, md5 } from 'whatsapp-rust-bridge'
+export { hkdf, md5 } from './wasm-bridge'
 
 export async function derivePairingCodeKey(pairingCode: string, salt: Buffer): Promise<Buffer> {
 	// Convert inputs to formats Web Crypto API can work with
