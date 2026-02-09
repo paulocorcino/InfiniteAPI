@@ -289,8 +289,9 @@ class AdaptiveTimeoutCalculator {
 			return // Not enough data
 		}
 
-		const oldest = this.eventTimestamps[0]!
-		const newest = this.eventTimestamps[this.eventTimestamps.length - 1]!
+		const oldest = this.eventTimestamps[0]
+		const newest = this.eventTimestamps[this.eventTimestamps.length - 1]
+		if (oldest === undefined || newest === undefined) return
 		const timeSpan = newest - oldest
 
 		if (timeSpan === 0) return
@@ -337,8 +338,9 @@ class AdaptiveTimeoutCalculator {
 		if (this.eventTimestamps.length < 2) {
 			return 0
 		}
-		const oldest = this.eventTimestamps[0]!
-		const newest = this.eventTimestamps[this.eventTimestamps.length - 1]!
+		const oldest = this.eventTimestamps[0]
+		const newest = this.eventTimestamps[this.eventTimestamps.length - 1]
+		if (oldest === undefined || newest === undefined) return 0
 		const timeSpan = newest - oldest
 		if (timeSpan === 0) return 0
 		return (this.eventTimestamps.length / timeSpan) * 1000
@@ -633,8 +635,11 @@ export const makeEventBuffer = (
 		for (const update of chatUpdates) {
 			if (update.conditional) {
 				conditionalChatUpdatesLeft += 1
-				newData.chatUpdates[update.id!] = update
-				delete data.chatUpdates[update.id!]
+				const updateId = update.id
+				if (updateId) {
+					newData.chatUpdates[updateId] = update
+					delete data.chatUpdates[updateId]
+				}
 			}
 		}
 
@@ -723,7 +728,7 @@ export const makeEventBuffer = (
 				const { type } = evData as BaileysEventMap['messages.upsert']
 				const existingUpserts = Object.values(data.messageUpserts)
 				if (existingUpserts.length > 0) {
-					const bufferedType = existingUpserts[0]!.type
+					const bufferedType = existingUpserts[0]?.type
 					if (bufferedType !== type) {
 						logger.debug({ bufferedType, newType: type }, 'messages.upsert type mismatch, emitting buffered messages')
 						// Emit the buffered messages with their correct type
@@ -973,7 +978,8 @@ function append<E extends BufferableEvent>(
 			break
 		case 'chats.update':
 			for (const update of eventData as ChatUpdate[]) {
-				const chatId = update.id!
+				const chatId = update.id
+				if (!chatId) continue
 				const conditionMatches = update.conditional ? update.conditional(data) : true
 				if (conditionMatches) {
 					delete update.conditional
@@ -1039,8 +1045,9 @@ function append<E extends BufferableEvent>(
 					data.contactUpserts[contact.id] = upsert
 				}
 
-				if (data.contactUpdates[contact.id]) {
-					upsert = Object.assign(data.contactUpdates[contact.id]!, trimUndefined(contact)) as Contact
+				const existingContactUpdate = data.contactUpdates[contact.id]
+				if (existingContactUpdate) {
+					upsert = Object.assign(existingContactUpdate, trimUndefined(contact)) as Contact
 					delete data.contactUpdates[contact.id]
 				}
 			}
@@ -1049,7 +1056,8 @@ function append<E extends BufferableEvent>(
 		case 'contacts.update':
 			const contactUpdates = eventData as BaileysEventMap['contacts.update']
 			for (const update of contactUpdates) {
-				const id = update.id!
+				const id = update.id
+				if (!id) continue
 				// merge into prior upsert
 				const upsert = data.historySets.contacts[id] || data.contactUpserts[id]
 				if (upsert) {
@@ -1170,7 +1178,8 @@ function append<E extends BufferableEvent>(
 		case 'groups.update':
 			const groupUpdates = eventData as BaileysEventMap['groups.update']
 			for (const update of groupUpdates) {
-				const id = update.id!
+				const id = update.id
+				if (!id) continue
 				const groupUpdate = data.groupUpdates[id] || {}
 				if (!data.groupUpdates[id]) {
 					data.groupUpdates[id] = Object.assign(groupUpdate, update)
@@ -1202,7 +1211,8 @@ function append<E extends BufferableEvent>(
 	function decrementChatReadCounterIfMsgDidUnread(message: WAMessage) {
 		// decrement chat unread counter
 		// if the message has already been marked read by us
-		const chatId = message.key.remoteJid!
+		const chatId = message.key.remoteJid
+		if (!chatId) return
 		const chat = data.chatUpdates[chatId] || data.chatUpserts[chatId]
 		if (
 			isRealMessage(message) &&
@@ -1255,7 +1265,7 @@ function consolidateEvents(data: BufferedEventData) {
 
 	const messageUpsertList = Object.values(data.messageUpserts)
 	if (messageUpsertList.length) {
-		const type = messageUpsertList[0]!.type
+		const type = messageUpsertList[0]?.type
 		map['messages.upsert'] = {
 			messages: messageUpsertList.map(m => m.message),
 			type
@@ -1311,7 +1321,7 @@ function consolidateEvents(data: BufferedEventData) {
 function concatChats<C extends Partial<Chat>>(a: C, b: Partial<Chat>) {
 	if (
 		b.unreadCount === null && // neutralize unread counter
-		a.unreadCount! < 0
+		(a.unreadCount ?? 0) < 0
 	) {
 		a.unreadCount = undefined
 		b.unreadCount = undefined
@@ -1319,8 +1329,8 @@ function concatChats<C extends Partial<Chat>>(a: C, b: Partial<Chat>) {
 
 	if (typeof a.unreadCount === 'number' && typeof b.unreadCount === 'number') {
 		b = { ...b }
-		if (b.unreadCount! >= 0) {
-			b.unreadCount = Math.max(b.unreadCount!, 0) + Math.max(a.unreadCount, 0)
+		if ((b.unreadCount ?? 0) >= 0) {
+			b.unreadCount = Math.max(b.unreadCount ?? 0, 0) + Math.max(a.unreadCount, 0)
 		}
 	}
 

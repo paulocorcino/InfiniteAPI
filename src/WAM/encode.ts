@@ -78,7 +78,11 @@ function encodeEvents(binaryInfo: BinaryInfo) {
 			}
 
 			const fieldFlag = extended ? FLAG_EVENT : FLAG_FIELD | FLAG_EXTENDED
-			binaryInfo.buffer.push(serializeData(id!, value, fieldFlag))
+			if (id == null) {
+			continue
+		}
+
+		binaryInfo.buffer.push(serializeData(id, value, fieldFlag))
 		}
 	}
 }

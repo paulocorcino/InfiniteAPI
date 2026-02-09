@@ -100,7 +100,12 @@ export const makeCommunitiesSocket = (config: SocketConfig) => {
 	}
 
 	sock.ws.on('CB:ib,,dirty', async (node: BinaryNode) => {
-		const { attrs } = getBinaryNodeChild(node, 'dirty')!
+		const dirtyNode = getBinaryNodeChild(node, 'dirty')
+		if (!dirtyNode) {
+			return
+		}
+
+		const { attrs } = dirtyNode
 		if (attrs.type !== 'communities') {
 			return
 		}
@@ -353,13 +358,13 @@ export const makeCommunitiesSocket = (config: SocketConfig) => {
 		communityAcceptInviteV4: ev.createBufferedFunction(
 			async (key: string | WAMessageKey, inviteMessage: proto.Message.IGroupInviteMessage) => {
 				key = typeof key === 'string' ? { remoteJid: key } : key
-				const results = await communityQuery(inviteMessage.groupJid!, 'set', [
+				const results = await communityQuery(inviteMessage.groupJid ?? '', 'set', [
 					{
 						tag: 'accept',
 						attrs: {
-							code: inviteMessage.inviteCode!,
-							expiration: inviteMessage.inviteExpiration!.toString(),
-							admin: key.remoteJid!
+							code: inviteMessage.inviteCode ?? '',
+							expiration: (inviteMessage.inviteExpiration ?? 0).toString(),
+							admin: key.remoteJid ?? ''
 						}
 					}
 				])
@@ -432,7 +437,11 @@ export const makeCommunitiesSocket = (config: SocketConfig) => {
 }
 
 export const extractCommunityMetadata = (result: BinaryNode) => {
-	const community = getBinaryNodeChild(result, 'community')!
+	const community = getBinaryNodeChild(result, 'community')
+	if (!community) {
+		throw new Error('Missing community node in result')
+	}
+
 	const descChild = getBinaryNodeChild(community, 'description')
 	let desc: string | undefined
 	let descId: string | undefined
@@ -466,12 +475,12 @@ export const extractCommunityMetadata = (result: BinaryNode) => {
 		participants: getBinaryNodeChildren(community, 'participant').map(({ attrs }) => {
 			return {
 				// TODO: IMPLEMENT THE PN/LID FIELDS HERE!!
-				id: attrs.jid!,
+				id: attrs.jid ?? '',
 				admin: (attrs.type || null) as GroupParticipant['admin']
 			}
 		}),
 		ephemeralDuration: eph ? +eph : undefined,
-		addressingMode: getBinaryNodeChildString(community, 'addressing_mode')! as GroupMetadata['addressingMode']
+		addressingMode: getBinaryNodeChildString(community, 'addressing_mode') as GroupMetadata['addressingMode']
 	}
 	return metadata
 }

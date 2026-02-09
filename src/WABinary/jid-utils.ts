@@ -55,15 +55,15 @@ export const jidEncode = (user: string | number | null, server: JidServer, devic
 export const jidDecode = (jid: string | undefined): FullJid | undefined => {
 	// todo: investigate how to implement hosted ids in this case
 	const sepIdx = typeof jid === 'string' ? jid.indexOf('@') : -1
-	if (sepIdx < 0) {
+	if (sepIdx < 0 || !jid) {
 		return undefined
 	}
 
-	const server = jid!.slice(sepIdx + 1)
-	const userCombined = jid!.slice(0, sepIdx)
+	const server = jid.slice(sepIdx + 1)
+	const userCombined = jid.slice(0, sepIdx)
 
 	const [userAgent, device] = userCombined.split(':')
-	const [user, agent] = userAgent!.split('_')
+	const [user, agent] = (userAgent ?? '').split('_')
 
 	let domainType = WAJIDDomains.WHATSAPP
 	if (server === 'lid') {
@@ -78,7 +78,7 @@ export const jidDecode = (jid: string | undefined): FullJid | undefined => {
 
 	return {
 		server: server as JidServer,
-		user: user!,
+		user: user ?? '',
 		domainType,
 		device: device ? +device : undefined
 	}
@@ -114,7 +114,7 @@ export const isAnyPnUser = (jid: string | undefined) =>
 
 const botRegexp = /^1313555\d{4}$|^131655500\d{2}$/
 
-export const isJidBot = (jid: string | undefined) => jid && botRegexp.test(jid.split('@')[0]!) && jid.endsWith('@c.us')
+export const isJidBot = (jid: string | undefined) => jid && botRegexp.test(jid.split('@')[0] ?? '') && jid.endsWith('@c.us')
 
 export const jidNormalizedUser = (jid: string | undefined) => {
 	const result = jidDecode(jid)
@@ -129,6 +129,11 @@ export const jidNormalizedUser = (jid: string | undefined) => {
 export const transferDevice = (fromJid: string, toJid: string) => {
 	const fromDecoded = jidDecode(fromJid)
 	const deviceId = fromDecoded?.device || 0
-	const { server, user } = jidDecode(toJid)!
+	const toDecoded = jidDecode(toJid)
+	if (!toDecoded) {
+		return ''
+	}
+
+	const { server, user } = toDecoded
 	return jidEncode(user, server, deviceId)
 }

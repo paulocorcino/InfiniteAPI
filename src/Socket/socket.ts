@@ -552,7 +552,11 @@ export const makeSocket = (config: SocketConfig) => {
 		})
 
 		if (sendMsg) {
-			sendRawMessage(sendMsg).catch(onClose!)
+			if (!onClose) {
+				throw new Error('onClose handler not initialized')
+			}
+
+			sendRawMessage(sendMsg).catch(onClose)
 		}
 
 		return result
@@ -609,8 +613,12 @@ export const makeSocket = (config: SocketConfig) => {
 			},
 			content: [{ tag: 'count', attrs: {} }]
 		})
-		const countChild = getBinaryNodeChild(result, 'count')!
-		return +countChild.attrs.value!
+		const countChild = getBinaryNodeChild(result, 'count')
+		if (!countChild) {
+			return 0
+		}
+
+		return +(countChild.attrs.value ?? 0)
 	}
 
 	// Pre-key upload state management
@@ -885,7 +893,11 @@ export const makeSocket = (config: SocketConfig) => {
 						return
 					}
 
-					const duration = Date.now() - sessionStartTime!
+					if (!sessionStartTime) {
+						return
+					}
+
+					const duration = Date.now() - sessionStartTime
 					const durationHours = Math.floor(duration / 1000 / 60 / 60)
 
 					logger.info(`🕐 Session TTL reached after ${durationHours}h, initiating graceful cleanup`)
@@ -1305,7 +1317,11 @@ export const makeSocket = (config: SocketConfig) => {
 	async function generatePairingKey() {
 		const salt = randomBytes(32)
 		const randomIv = randomBytes(16)
-		const key = await derivePairingCodeKey(authState.creds.pairingCode!, salt)
+		if (!authState.creds.pairingCode) {
+			throw new Error('Pairing code not set')
+		}
+
+		const key = await derivePairingCodeKey(authState.creds.pairingCode, salt)
 		const ciphered = aesEncryptCTR(authState.creds.pairingEphemeralKeyPair.public, key, randomIv)
 		return Buffer.concat([salt, randomIv, ciphered])
 	}
@@ -1352,7 +1368,7 @@ export const makeSocket = (config: SocketConfig) => {
 			attrs: {
 				to: S_WHATSAPP_NET,
 				type: 'result',
-				id: stanza.attrs.id!
+				id: stanza.attrs.id ?? ''
 			}
 		}
 		await sendNode(iq)
@@ -1431,7 +1447,9 @@ export const makeSocket = (config: SocketConfig) => {
 		logger.info('opened connection to WA')
 		clearTimeout(qrTimer) // will never happen in all likelyhood -- but just in case WA sends success on first try
 
-		ev.emit('creds.update', { me: { ...authState.creds.me!, lid: node.attrs.lid } })
+		if (authState.creds.me) {
+			ev.emit('creds.update', { me: { ...authState.creds.me, lid: node.attrs.lid } })
+		}
 
 		ev.emit('connection.update', { connection: 'open' })
 
@@ -1454,13 +1472,23 @@ export const makeSocket = (config: SocketConfig) => {
 			const myLID = node.attrs.lid
 			process.nextTick(async () => {
 				try {
-					const myPN = authState.creds.me!.id
+					const me = authState.creds.me
+					if (!me) {
+						return
+					}
+
+					const myPN = me.id
 
 					// Store our own LID-PN mapping
 					await signalRepository.lidMapping.storeLIDPNMappings([{ lid: myLID, pn: myPN }])
 
 					// Create device list for our own user (needed for bulk migration)
-					const { user, device } = jidDecode(myPN)!
+					const decoded = jidDecode(myPN)
+					if (!decoded) {
+						return
+					}
+
+					const { user, device } = decoded
 					await authState.keys.set({
 						'device-list': {
 							[user]: [device?.toString() || '0']
@@ -1548,7 +1576,7 @@ export const makeSocket = (config: SocketConfig) => {
 			logger.debug({ name }, 'updated pushName')
 			sendNode({
 				tag: 'presence',
-				attrs: { name: name! }
+				attrs: { name: name ?? '' }
 			}).catch(err => {
 				logger.warn({ trace: err.stack }, 'error in sending presence update on name change')
 			})
