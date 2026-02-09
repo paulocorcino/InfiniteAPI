@@ -35,7 +35,7 @@ export class USyncBotProfileProtocol implements USyncQueryProtocol {
 		return {
 			tag: 'bot',
 			attrs: {},
-			content: [{ tag: 'profile', attrs: { persona_id: user.personaId ?? '' } }]
+			content: [{ tag: 'profile', attrs: { persona_id: user.personaId! } }]
 		}
 	}
 
@@ -51,24 +51,24 @@ export class USyncBotProfileProtocol implements USyncQueryProtocol {
 
 		for (const command of getBinaryNodeChildren(commandsNode, 'command')) {
 			commands.push({
-				name: getBinaryNodeChildString(command, 'name') ?? '',
-				description: getBinaryNodeChildString(command, 'description') ?? ''
+				name: getBinaryNodeChildString(command, 'name')!,
+				description: getBinaryNodeChildString(command, 'description')!
 			})
 		}
 
 		for (const prompt of getBinaryNodeChildren(promptsNode, 'prompt')) {
-			prompts.push(`${getBinaryNodeChildString(prompt, 'emoji') ?? ''} ${getBinaryNodeChildString(prompt, 'text') ?? ''}`)
+			prompts.push(`${getBinaryNodeChildString(prompt, 'emoji')!} ${getBinaryNodeChildString(prompt, 'text')!}`)
 		}
 
 		return {
 			isDefault: !!getBinaryNodeChild(profile, 'default'),
-			jid: node.attrs.jid ?? '',
-			name: getBinaryNodeChildString(profile, 'name') ?? '',
-			attributes: getBinaryNodeChildString(profile, 'attributes') ?? '',
-			description: getBinaryNodeChildString(profile, 'description') ?? '',
-			category: getBinaryNodeChildString(profile, 'category') ?? '',
-			personaId: profile?.attrs['persona_id'] ?? '',
-			commandsDescription: getBinaryNodeChildString(commandsNode, 'description') ?? '',
+			jid: node.attrs.jid!,
+			name: getBinaryNodeChildString(profile, 'name')!,
+			attributes: getBinaryNodeChildString(profile, 'attributes')!,
+			description: getBinaryNodeChildString(profile, 'description')!,
+			category: getBinaryNodeChildString(profile, 'category')!,
+			personaId: profile!.attrs['persona_id']!,
+			commandsDescription: getBinaryNodeChildString(commandsNode, 'description')!,
 			commands,
 			prompts
 		}

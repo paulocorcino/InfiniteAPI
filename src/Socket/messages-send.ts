@@ -131,11 +131,11 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				// TODO: explore full length of data that whatsapp provides
 				const node: MediaConnInfo = {
 					hosts: getBinaryNodeChildren(mediaConnNode, 'host').map(({ attrs }) => ({
-						hostname: attrs.hostname ?? '',
-						maxContentLengthBytes: +(attrs.maxContentLengthBytes ?? 0)
+						hostname: attrs.hostname!,
+						maxContentLengthBytes: +attrs.maxContentLengthBytes!
 					})),
-					auth: mediaConnNode.attrs.auth ?? '',
-					ttl: +(mediaConnNode.attrs.ttl ?? 0),
+					auth: mediaConnNode.attrs.auth!,
+					ttl: +mediaConnNode.attrs.ttl!,
 					fetchDate: new Date()
 				}
 				logger.debug('fetched media conn')
@@ -163,7 +163,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		const node: BinaryNode = {
 			tag: 'receipt',
 			attrs: {
-				id: messageIds[0] ?? ''
+				id: messageIds[0]!
 			}
 		}
 		const isReadReceipt = type === 'read' || type === 'read-self'
@@ -268,11 +268,10 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		}
 
 		for (const { jid, user } of jidsWithUser) {
-			if (!user) continue
 			if (useCache) {
 				const devices =
-					mgetDevices?.[user] ||
-					(userDevicesCache.mget ? undefined : ((await userDevicesCache.get(user)) as FullJid[]))
+					mgetDevices?.[user!] ||
+					(userDevicesCache.mget ? undefined : ((await userDevicesCache.get(user!)) as FullJid[]))
 				if (devices) {
 					const devicesWithJid = devices.map(d => ({
 						...d,
@@ -567,8 +566,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					let msgToEncrypt = patchedMessage
 
 					if (dsmMessage) {
-						const targetUser = jidDecode(jid)?.user ?? ''
-						const ownPnUser = jidDecode(meId)?.user ?? ''
+						const { user: targetUser } = jidDecode(jid)!
+						const { user: ownPnUser } = jidDecode(meId)!
 						const ownLidUser = meLidUser
 
 						const isOwnUser = targetUser === ownPnUser || (ownLidUser && targetUser === ownLidUser)
@@ -1081,7 +1080,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					logger.debug({ to: jid, ownId }, 'Using PN identity for @s.whatsapp.net conversation')
 				}
 
-				const ownUser = jidDecode(ownId)?.user ?? ''
+				const { user: ownUser } = jidDecode(ownId)!
 				if (!participant) {
 					const patchedForReporting = await patchMessageBeforeSending(message, [jid])
 					reportingMessage = Array.isArray(patchedForReporting)
@@ -1099,7 +1098,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 					if (user !== ownUser) {
 						const ownUserServer = isLid ? 'lid' : 's.whatsapp.net'
-						const ownUserForAddressing = isLid && meLid ? (jidDecode(meLid)?.user ?? '') : (jidDecode(meId)?.user ?? '')
+						const ownUserForAddressing = isLid && meLid ? jidDecode(meLid)!.user : jidDecode(meId)!.user
 
 						devices.push({
 							user: ownUserForAddressing,
@@ -1115,8 +1114,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						// Use conversation-appropriate sender identity
 						const senderIdentity =
 							isLid && meLid
-								? jidEncode(jidDecode(meLid)?.user ?? '', 'lid', undefined)
-								: jidEncode(jidDecode(meId)?.user ?? '', 's.whatsapp.net', undefined)
+								? jidEncode(jidDecode(meLid)?.user!, 'lid', undefined)
+								: jidEncode(jidDecode(meId)?.user!, 's.whatsapp.net', undefined)
 
 						// Enumerate devices for sender and target with consistent addressing
 						const sessionDevices = await getUSyncDevices([senderIdentity, jid], true, false)
@@ -1135,8 +1134,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				const allRecipients: string[] = []
 				const meRecipients: string[] = []
 				const otherRecipients: string[] = []
-				const mePnUser = jidDecode(meId)?.user ?? ''
-				const meLidUser = meLid ? (jidDecode(meLid)?.user ?? null) : null
+				const { user: mePnUser } = jidDecode(meId)!
+				const { user: meLidUser } = meLid ? jidDecode(meLid)! : { user: null }
 
 				// Carousel in DSM wrapper causes error 479 on own devices
 				const isCarouselMsg = isCarouselMessage(message)
@@ -1212,7 +1211,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					attrs: {
 						v: '2',
 						type,
-						count: (participant?.count ?? 0).toString()
+						count: participant!.count.toString()
 					},
 					content: encryptedContent
 				})
@@ -1636,7 +1635,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				throw new Boom('Missing media key for update', { statusCode: 400 })
 			}
 
-			const meId = authState.creds.me?.id ?? ''
+			const meId = authState.creds.me!.id
 			const node = encryptMediaRetryRequest(message.key, mediaKey, meId)
 
 			let error: Error | undefined = undefined
@@ -1713,7 +1712,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			options: MiscMessageGenerationOptions = {}
 		): Promise<AlbumSendResult> => {
 			const startTime = Date.now()
-			const userJid = authState.creds.me?.id ?? ''
+			const userJid = authState.creds.me!.id
 
 			const {
 				medias,
@@ -1868,7 +1867,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 						// Relay the message
 						await relayMessage(jid, mediaMsg.message, {
-							messageId: mediaMsg.key.id ?? '',
+							messageId: mediaMsg.key.id!,
 							useCachedGroupMetadata: options.useCachedGroupMetadata
 						})
 
@@ -1997,7 +1996,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				)
 			}
 
-			const userJid = authState.creds.me?.id ?? ''
+			const userJid = authState.creds.me!.id
 
 			// Special path for carousel: call relayMessage directly with plain JS object
 			// This matches Pastorini's working approach:

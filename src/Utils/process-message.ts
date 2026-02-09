@@ -59,24 +59,22 @@ const REAL_MSG_REQ_ME_STUB_TYPES = new Set([WAMessageStubType.GROUP_PARTICIPANT_
 /** Cleans a received message to further processing */
 export const cleanMessage = (message: WAMessage, meId: string, meLid: string) => {
 	// ensure remoteJid and participant doesn't have device or agent in it
-	const remoteJid = message.key.remoteJid ?? ''
-	if (isHostedPnUser(remoteJid) || isHostedLidUser(remoteJid)) {
+	if (isHostedPnUser(message.key.remoteJid!) || isHostedLidUser(message.key.remoteJid!)) {
 		message.key.remoteJid = jidEncode(
-			jidDecode(remoteJid)?.user ?? '',
-			isHostedPnUser(remoteJid) ? 's.whatsapp.net' : 'lid'
+			jidDecode(message.key?.remoteJid!)?.user!,
+			isHostedPnUser(message.key.remoteJid!) ? 's.whatsapp.net' : 'lid'
 		)
 	} else {
-		message.key.remoteJid = jidNormalizedUser(remoteJid)
+		message.key.remoteJid = jidNormalizedUser(message.key.remoteJid!)
 	}
 
-	const participantJid = message.key.participant ?? ''
-	if (isHostedPnUser(participantJid) || isHostedLidUser(participantJid)) {
+	if (isHostedPnUser(message.key.participant!) || isHostedLidUser(message.key.participant!)) {
 		message.key.participant = jidEncode(
-			jidDecode(participantJid)?.user ?? '',
-			isHostedPnUser(participantJid) ? 's.whatsapp.net' : 'lid'
+			jidDecode(message.key.participant!)?.user!,
+			isHostedPnUser(message.key.participant!) ? 's.whatsapp.net' : 'lid'
 		)
 	} else {
-		message.key.participant = jidNormalizedUser(participantJid)
+		message.key.participant = jidNormalizedUser(message.key.participant!)
 	}
 
 	const content = normalizeMessageContent(message.message)
@@ -102,8 +100,8 @@ export const cleanMessage = (message: WAMessage, meId: string, meLid: string) =>
 			// if the sender believed the message being reacted to is not from them
 			// we've to correct the key to be from them, or some other participant
 			msgKey.fromMe = !msgKey.fromMe
-				? areJidsSameUser(msgKey.participant || (msgKey.remoteJid ?? ''), meId) ||
-					areJidsSameUser(msgKey.participant || (msgKey.remoteJid ?? ''), meLid)
+				? areJidsSameUser(msgKey.participant || (msgKey.remoteJid!), meId) ||
+					areJidsSameUser(msgKey.participant || (msgKey.remoteJid!), meLid)
 				: // if the message being reacted to, was from them
 					// fromMe automatically becomes false
 					false
@@ -177,12 +175,11 @@ export const shouldIncrementChatUnread = (message: WAMessage) => !message.key.fr
  * Typically -- that'll be the remoteJid, but for broadcasts, it'll be the participant
  */
 export const getChatId = ({ remoteJid, participant, fromMe }: WAMessageKey) => {
-	const jid = remoteJid ?? ''
-	if (isJidBroadcast(jid) && !isJidStatusBroadcast(jid) && !fromMe) {
-		return participant ?? ''
+	if (isJidBroadcast(remoteJid!) && !isJidStatusBroadcast(remoteJid!) && !fromMe) {
+		return participant!
 	}
 
-	return jid
+	return remoteJid!
 }
 
 type PollContext = {
@@ -478,7 +475,7 @@ const processMessage = async (
 							ev.emit('messages.upsert', {
 								messages: [webMessageInfo as WAMessage],
 								type: 'notify',
-								requestId: response.stanzaId ?? ''
+								requestId: response.stanzaId!
 							})
 						}
 					}
@@ -517,10 +514,10 @@ const processMessage = async (
 				const labelAssociationMsg = protocolMsg.memberLabel
 				if (labelAssociationMsg?.label) {
 					ev.emit('group.member-tag.update', {
-						groupId: chat.id ?? '',
+						groupId: chat.id!,
 						label: labelAssociationMsg.label,
-						participant: message.key.participant ?? '',
-						participantAlt: message.key.participantAlt ?? '',
+						participant: message.key.participant!,
+						participantAlt: message.key.participantAlt!,
 						messageTimestamp: Number(message.messageTimestamp)
 					})
 				}
@@ -578,7 +575,7 @@ const processMessage = async (
 				const meIdNormalised = jidNormalizedUser(meId)
 
 				// all jids need to be PN
-				const eventCreatorKey = creationMsgKey.participant || (creationMsgKey.remoteJid ?? '')
+				const eventCreatorKey = creationMsgKey.participant || (creationMsgKey.remoteJid!)
 				const eventCreatorPn = isLidUser(eventCreatorKey)
 					? await signalRepository.lidMapping.getPNForLID(eventCreatorKey)
 					: eventCreatorKey
@@ -600,7 +597,7 @@ const processMessage = async (
 					const responseMsg = decryptEventResponse(encEventResponse, {
 						eventEncKey,
 						eventCreatorJid,
-						eventMsgId: creationMsgKey.id ?? '',
+						eventMsgId: creationMsgKey.id!,
 						responderJid
 					})
 

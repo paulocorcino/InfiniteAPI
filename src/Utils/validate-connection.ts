@@ -237,7 +237,7 @@ export const configureSuccessfulPairing = (
 				content: [
 					{
 						tag: 'device-identity',
-						attrs: { 'key-index': String(deviceIdentity.keyIndex ?? '') },
+						attrs: { 'key-index': deviceIdentity.keyIndex!.toString() },
 						content: accountEnc
 					}
 				]

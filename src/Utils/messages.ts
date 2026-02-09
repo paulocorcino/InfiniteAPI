@@ -1770,7 +1770,7 @@ export const generateWAMessageFromContent = (
 		const innerContent = innerMessage[key as Exclude<keyof proto.IMessage, 'conversation'>]
 		const contextInfo: proto.IContextInfo =
 			(innerContent && typeof innerContent === 'object' && 'contextInfo' in innerContent && (innerContent as Record<string, unknown>).contextInfo as proto.IContextInfo) || {}
-		contextInfo.participant = jidNormalizedUser(participant ?? '')
+		contextInfo.participant = jidNormalizedUser(participant!)
 		contextInfo.stanzaId = quoted.key.id
 		contextInfo.quotedMessage = quotedMsg
 
