@@ -639,6 +639,8 @@ export const makeEventBuffer = (
 				if (updateId) {
 					newData.chatUpdates[updateId] = update
 					delete data.chatUpdates[updateId]
+				} else {
+					logger.debug({ update }, 'conditional chat update missing id, not carrying forward')
 				}
 			}
 		}
@@ -979,7 +981,10 @@ function append<E extends BufferableEvent>(
 		case 'chats.update':
 			for (const update of eventData as ChatUpdate[]) {
 				const chatId = update.id
-				if (!chatId) continue
+				if (!chatId) {
+					logger.debug({ update }, 'chats.update: update missing id, skipping')
+					continue
+				}
 				const conditionMatches = update.conditional ? update.conditional(data) : true
 				if (conditionMatches) {
 					delete update.conditional
@@ -1057,7 +1062,10 @@ function append<E extends BufferableEvent>(
 			const contactUpdates = eventData as BaileysEventMap['contacts.update']
 			for (const update of contactUpdates) {
 				const id = update.id
-				if (!id) continue
+				if (!id) {
+					logger.debug({ update }, 'contacts.update: update missing id, skipping')
+					continue
+				}
 				// merge into prior upsert
 				const upsert = data.historySets.contacts[id] || data.contactUpserts[id]
 				if (upsert) {
@@ -1179,7 +1187,10 @@ function append<E extends BufferableEvent>(
 			const groupUpdates = eventData as BaileysEventMap['groups.update']
 			for (const update of groupUpdates) {
 				const id = update.id
-				if (!id) continue
+				if (!id) {
+					logger.debug({ update }, 'groups.update: update missing id, skipping')
+					continue
+				}
 				const groupUpdate = data.groupUpdates[id] || {}
 				if (!data.groupUpdates[id]) {
 					data.groupUpdates[id] = Object.assign(groupUpdate, update)
@@ -1212,7 +1223,10 @@ function append<E extends BufferableEvent>(
 		// decrement chat unread counter
 		// if the message has already been marked read by us
 		const chatId = message.key.remoteJid
-		if (!chatId) return
+		if (!chatId) {
+			logger.debug({ messageKey: message.key }, 'decrementChatReadCounter: remoteJid missing, skipping')
+			return
+		}
 		const chat = data.chatUpdates[chatId] || data.chatUpserts[chatId]
 		if (
 			isRealMessage(message) &&

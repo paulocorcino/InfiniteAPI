@@ -131,7 +131,7 @@ export const transferDevice = (fromJid: string, toJid: string) => {
 	const deviceId = fromDecoded?.device || 0
 	const toDecoded = jidDecode(toJid)
 	if (!toDecoded) {
-		return ''
+		throw new Error(`transferDevice: failed to decode toJid "${toJid}"`)
 	}
 
 	const { server, user } = toDecoded

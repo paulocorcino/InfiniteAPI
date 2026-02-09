@@ -102,6 +102,7 @@ export const makeCommunitiesSocket = (config: SocketConfig) => {
 	sock.ws.on('CB:ib,,dirty', async (node: BinaryNode) => {
 		const dirtyNode = getBinaryNodeChild(node, 'dirty')
 		if (!dirtyNode) {
+			logger.debug({ node: node.tag }, 'community dirty handler: no dirty node found, skipping')
 			return
 		}
 

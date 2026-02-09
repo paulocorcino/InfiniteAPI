@@ -288,6 +288,7 @@ const processMessage = async (
 ) => {
 	const meUser = creds.me
 	if (!meUser) {
+		logger?.warn({ messageKey: message.key }, 'processMessage: creds.me not set, skipping message')
 		return
 	}
 
@@ -548,6 +549,7 @@ const processMessage = async (
 	} else if (content?.reactionMessage) {
 		const reactionKey = content.reactionMessage.key
 		if (!reactionKey) {
+			logger?.warn({ messageKey: message.key }, 'processMessage: reactionMessage.key missing, skipping')
 			return
 		}
 
@@ -565,6 +567,7 @@ const processMessage = async (
 		const encEventResponse = content.encEventResponseMessage
 		const creationMsgKey = encEventResponse.eventCreationMessageKey
 		if (!creationMsgKey) {
+			logger?.warn({ messageKey: message.key }, 'processMessage: eventCreationMessageKey missing, skipping')
 			return
 		}
 
@@ -580,6 +583,7 @@ const processMessage = async (
 					? await signalRepository.lidMapping.getPNForLID(eventCreatorKey)
 					: eventCreatorKey
 				if (!eventCreatorPn) {
+					logger?.warn({ messageKey: message.key, eventCreatorKey }, 'processMessage: eventCreatorPn missing, skipping')
 					return
 				}
 

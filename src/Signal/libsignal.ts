@@ -495,6 +495,7 @@ export function makeLibSignalRepository(
 
 			const decoded1 = jidDecode(fromJid)
 			if (!decoded1) {
+				logger.warn({ fromJid }, 'bulkDeviceMigration: failed to decode fromJid, aborting migration')
 				return { migrated: 0, skipped: 0, total: 0 }
 			}
 

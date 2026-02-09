@@ -886,6 +886,7 @@ export const makeSocket = (config: SocketConfig) => {
 					}
 
 					if (!sessionStartTime) {
+						logger.debug('TTL timer: sessionStartTime not set, skipping')
 						return
 					}
 
