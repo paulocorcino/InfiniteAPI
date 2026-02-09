@@ -1212,7 +1212,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					attrs: {
 						v: '2',
 						type,
-						count: participant!.count.toString()
+						count: (participant?.count ?? 0).toString()
 					},
 					content: encryptedContent
 				})
@@ -1631,8 +1631,12 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		updateMemberLabel,
 		updateMediaMessage: async (message: WAMessage) => {
 			const content = assertMediaContent(message.message)
-			const mediaKey = content.mediaKey!
-			const meId = authState.creds.me!.id
+			const mediaKey = content.mediaKey
+			if (!mediaKey) {
+				throw new Boom('Missing media key for update', { statusCode: 400 })
+			}
+
+			const meId = authState.creds.me?.id ?? ''
 			const node = encryptMediaRetryRequest(message.key, mediaKey, meId)
 
 			let error: Error | undefined = undefined
@@ -1709,7 +1713,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			options: MiscMessageGenerationOptions = {}
 		): Promise<AlbumSendResult> => {
 			const startTime = Date.now()
-			const userJid = authState.creds.me!.id
+			const userJid = authState.creds.me?.id ?? ''
 
 			const {
 				medias,
@@ -1850,17 +1854,21 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 						// Attach to parent album via messageAssociation (correct proto structure)
 						// Uses AssociationType.MEDIA_ALBUM and parentMessageKey as per WhatsApp protocol
-						if (!mediaMsg.message!.messageContextInfo) {
-							mediaMsg.message!.messageContextInfo = {}
+						if (!mediaMsg.message) {
+							throw new Boom('Missing message content for album media item')
 						}
-						mediaMsg.message!.messageContextInfo.messageAssociation = {
+
+						if (!mediaMsg.message.messageContextInfo) {
+							mediaMsg.message.messageContextInfo = {}
+						}
+						mediaMsg.message.messageContextInfo.messageAssociation = {
 							associationType: proto.MessageAssociation.AssociationType.MEDIA_ALBUM,
 							parentMessageKey: albumKey
 						}
 
 						// Relay the message
-						await relayMessage(jid, mediaMsg.message!, {
-							messageId: mediaMsg.key.id!,
+						await relayMessage(jid, mediaMsg.message, {
+							messageId: mediaMsg.key.id ?? '',
 							useCachedGroupMetadata: options.useCachedGroupMetadata
 						})
 
@@ -1989,7 +1997,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				)
 			}
 
-			const userJid = authState.creds.me!.id
+			const userJid = authState.creds.me?.id ?? ''
 
 			// Special path for carousel: call relayMessage directly with plain JS object
 			// This matches Pastorini's working approach:

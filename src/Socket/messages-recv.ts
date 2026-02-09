@@ -820,9 +820,9 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 				break
 			case 'account_sync':
-				if (child!.tag === 'disappearing_mode') {
-					const newDuration = +child!.attrs.duration!
-					const timestamp = +child!.attrs.t!
+				if (child?.tag === 'disappearing_mode') {
+					const newDuration = +(child.attrs.duration ?? '0')
+					const timestamp = +(child.attrs.t ?? '0')
 
 					logger.info({ newDuration }, 'updated account disappearing mode')
 
@@ -835,11 +835,11 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 							}
 						}
 					})
-				} else if (child!.tag === 'blocklist') {
+				} else if (child?.tag === 'blocklist') {
 					const blocklists = getBinaryNodeChildren(child, 'item')
 
 					for (const { attrs } of blocklists) {
-						const blocklist = [attrs.jid!]
+						const blocklist = [attrs.jid ?? '']
 						const type = attrs.action === 'block' ? 'add' : 'remove'
 						ev.emit('blocklist.update', { blocklist, type })
 					}
@@ -889,7 +889,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 						{
 							tag: 'link_code_companion_reg',
 							attrs: {
-								jid: authState.creds.me!.id,
+								jid: authState.creds.me?.id ?? '',
 								stage: 'companion_finish'
 							},
 							content: [
@@ -1091,7 +1091,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 	const handleReceipt = async (node: BinaryNode) => {
 		const { attrs, content } = node
-		const isLid = attrs.from!.includes('lid')
+		const isLid = (attrs.from ?? '').includes('lid')
 		const isNodeFromMe = areJidsSameUser(
 			attrs.participant || attrs.from,
 			isLid ? authState.creds.me?.lid : authState.creds.me?.id
@@ -1197,7 +1197,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				notificationMutex.mutex(async () => {
 					const msg = await processNotification(node)
 					if (msg) {
-						const fromMe = areJidsSameUser(node.attrs.participant || remoteJid, authState.creds.me!.id)
+						const fromMe = areJidsSameUser(node.attrs.participant || remoteJid, authState.creds.me?.id ?? '')
 						const { senderAlt: participantAlt, addressingMode } = extractAddressingContext(node)
 						msg.key = {
 							remoteJid,
@@ -1241,7 +1241,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			category,
 			author,
 			decrypt
-		} = decryptMessageNode(node, authState.creds.me!.id, authState.creds.me!.lid || '', signalRepository, logger)
+		} = decryptMessageNode(node, authState.creds.me?.id ?? '', authState.creds.me?.lid || '', signalRepository, logger)
 
 		const alt = msg.key.participantAlt || msg.key.remoteJidAlt
 		// Handle LID/PN mappings with hybrid approach:
@@ -1526,7 +1526,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 				// JID normalization moved BEFORE mutex acquisition (line 1273) to prevent race conditions
 				// cleanMessage still runs inside mutex to ensure atomic message processing
-				cleanMessage(msg, authState.creds.me!.id, authState.creds.me!.lid!)
+				cleanMessage(msg, authState.creds.me?.id ?? '', authState.creds.me?.lid ?? '')
 
 				await upsertMessage(msg, node.attrs.offline ? 'append' : 'notify')
 
