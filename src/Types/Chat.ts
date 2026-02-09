@@ -75,6 +75,12 @@ export type ChatUpdate = Partial<
 		conditional: (bufferedData: BufferedEventData) => boolean | undefined
 		/** last update time */
 		timestamp?: number
+		/** indicates if this chat was merged from LID to PN */
+		merged?: boolean
+		/** previous chat ID before merge (LID format) */
+		previousId?: string
+		/** timestamp when the merge occurred */
+		mergedAt?: number
 	}
 >
 

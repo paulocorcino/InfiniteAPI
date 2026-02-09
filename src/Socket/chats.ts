@@ -1306,6 +1306,30 @@ export const makeChatsSocket = (config: SocketConfig) => {
 					'fallback LID mappings are now available from update event'
 				)
 			}
+
+			// Automatic chat merge: notify consumers about LID→PN mapping
+			// This allows ZPRO and other consumers to merge/rename chats accordingly
+			for (const mapping of mappings) {
+				const lidUser = jidNormalizedUser(mapping.lid)
+				const pnUser = jidNormalizedUser(mapping.pn)
+
+				if (lidUser && pnUser && lidUser !== pnUser) {
+					logger.debug(
+						{ lid: lidUser, pn: pnUser },
+						'emitting chat update for LID→PN merge notification'
+					)
+
+					// Emit chat update indicating this chat should be merged/renamed from LID to PN
+					ev.emit('chats.update', [
+						{
+							id: pnUser,
+							merged: true,
+							previousId: lidUser,
+							mergedAt: Date.now()
+						}
+					])
+				}
+			}
 		} catch (error) {
 			logger.warn({ count: mappings.length, error }, 'Failed to store LID-PN mappings')
 		}

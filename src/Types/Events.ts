@@ -189,6 +189,7 @@ export type BufferedEventData = {
 	messageReactions: { [key: string]: { key: WAMessageKey; reactions: proto.IReaction[] } }
 	messageReceipts: { [key: string]: { key: WAMessageKey; userReceipt: proto.IUserReceipt[] } }
 	groupUpdates: { [jid: string]: Partial<GroupMetadata> }
+	lidMappings: { [key: string]: LIDMapping }
 }
 
 export type BaileysEvent = keyof BaileysEventMap
