@@ -194,6 +194,27 @@ export const DEFAULT_CACHE_MAX_KEYS = {
 	LID_GLOBAL: 10_000
 }
 
+/**
+ * Session cleanup configuration - removes inactive/orphaned Signal sessions
+ * Prevents unbounded database growth while maintaining security
+ *
+ * Environment variables:
+ * - BAILEYS_SESSION_CLEANUP_ENABLED: Enable/disable cleanup (default: true)
+ * - BAILEYS_SESSION_CLEANUP_INTERVAL: Cleanup interval in ms (default: 24h)
+ * - BAILEYS_SESSION_CLEANUP_HOUR: Hour to run cleanup (default: 3 = 3am)
+ * - BAILEYS_SESSION_SECONDARY_INACTIVE_DAYS: Days before cleaning secondary devices (default: 15)
+ * - BAILEYS_SESSION_PRIMARY_INACTIVE_DAYS: Days before cleaning primary device (default: 30)
+ * - BAILEYS_SESSION_LID_ORPHAN_HOURS: Hours before cleaning orphaned LID sessions (default: 24)
+ */
+export const DEFAULT_SESSION_CLEANUP_CONFIG = {
+	enabled: process.env.BAILEYS_SESSION_CLEANUP_ENABLED !== 'false',
+	intervalMs: parseInt(process.env.BAILEYS_SESSION_CLEANUP_INTERVAL || '86400000', 10), // 24h
+	cleanupHour: parseInt(process.env.BAILEYS_SESSION_CLEANUP_HOUR || '3', 10), // 3am
+	secondaryDeviceInactiveDays: parseInt(process.env.BAILEYS_SESSION_SECONDARY_INACTIVE_DAYS || '15', 10),
+	primaryDeviceInactiveDays: parseInt(process.env.BAILEYS_SESSION_PRIMARY_INACTIVE_DAYS || '30', 10),
+	lidOrphanHours: parseInt(process.env.BAILEYS_SESSION_LID_ORPHAN_HOURS || '24', 10)
+}
+
 // Re-export retry constants for backwards compatibility
 // Actual definitions are in retry-utils.ts to avoid ESM initialization order issues
 export { RETRY_BACKOFF_DELAYS, RETRY_JITTER_FACTOR } from '../Utils/retry-utils'

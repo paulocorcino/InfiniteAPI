@@ -87,6 +87,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		notificationMutex,
 		receiptMutex,
 		signalRepository,
+		sessionActivityTracker,
 		query,
 		upsertMessage,
 		resyncAppState,
@@ -1531,6 +1532,16 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					: msgContent?.reactionMessage ? 'reaction'
 					: 'other'
 				recordMessageReceived(msgType)
+
+				// Track session activity for cleanup
+				if (sessionActivityTracker && msg.key.remoteJid) {
+					sessionActivityTracker.recordActivity(msg.key.remoteJid)
+
+					// For groups, also track participant activity
+					if (msg.key.participant) {
+						sessionActivityTracker.recordActivity(msg.key.participant)
+					}
+				}
 			})
 		} catch (error) {
 			logger.error({ error, node: binaryNodeToString(node) }, 'error in handling message')

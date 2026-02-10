@@ -86,6 +86,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		authState,
 		messageMutex,
 		signalRepository,
+		sessionActivityTracker,
 		upsertMessage,
 		query,
 		fetchPrivacySettings,
@@ -1510,6 +1511,19 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			// Add message to retry cache if enabled
 			if (messageRetryManager && !participant) {
 				messageRetryManager.addRecentMessage(destinationJid, msgId, message)
+			}
+
+			// Track session activity for cleanup (all target JIDs)
+			if (sessionActivityTracker) {
+				// Record activity for destination JID
+				sessionActivityTracker.recordActivity(destinationJid)
+
+				// For groups, also record activity for all participants who received the message
+				if (isGroup || isStatus) {
+					for (const device of devices) {
+						sessionActivityTracker.recordActivity(device.jid)
+					}
+				}
 			}
 		}, meId)
 
