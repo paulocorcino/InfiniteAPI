@@ -6,12 +6,14 @@ import { proto } from '../../WAProto/index.js'
 import {
 	DEF_CALLBACK_PREFIX,
 	DEF_TAG_PREFIX,
+	DEFAULT_SESSION_CLEANUP_CONFIG,
 	INITIAL_PREKEY_COUNT,
 	MIN_PREKEY_COUNT,
 	MIN_UPLOAD_INTERVAL,
 	NOISE_WA_HEADER,
 	UPLOAD_TIMEOUT
 } from '../Defaults'
+import { makeSessionCleanup } from '../Signal/session-cleanup'
 import type { ConnectionState, LIDMapping, SocketConfig } from '../Types'
 import { DisconnectReason } from '../Types'
 import {
@@ -498,6 +500,14 @@ export const makeSocket = (config: SocketConfig) => {
 	// add transaction capability
 	const keys = addTransactionCapability(authState.keys, logger, transactionOpts)
 	const signalRepository = makeSignalRepository({ creds, keys }, logger, pnFromLIDUSync)
+
+	// Session cleanup manager - removes inactive/orphaned sessions
+	const sessionCleanup = makeSessionCleanup(
+		keys,
+		signalRepository.lidMapping,
+		logger,
+		DEFAULT_SESSION_CLEANUP_CONFIG
+	)
 
 	let lastDateRecv: Date
 	let epoch = 1
@@ -1079,6 +1089,9 @@ export const makeSocket = (config: SocketConfig) => {
 		clearInterval(keepAliveReq)
 		clearTimeout(qrTimer)
 
+		// Stop session cleanup scheduler
+		sessionCleanup.stop()
+
 		// Clean up unified session manager
 		unifiedSessionManager?.destroy()
 
@@ -1448,6 +1461,9 @@ export const makeSocket = (config: SocketConfig) => {
 		recordConnectionAttempt('success')
 		incrementActiveConnections()
 
+		// Start session cleanup scheduler
+		sessionCleanup.start()
+
 		// Update server time offset from success node
 		const serverTime = extractServerTime(node)
 		if (serverTime) {
@@ -1572,6 +1588,7 @@ export const makeSocket = (config: SocketConfig) => {
 		ev,
 		authState: { creds, keys },
 		signalRepository,
+		sessionCleanup,
 		get user() {
 			return authState.creds.me
 		},
