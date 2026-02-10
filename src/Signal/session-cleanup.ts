@@ -3,6 +3,7 @@ import type { SignalKeyStoreWithTransaction } from '../Types'
 import type { ILogger } from '../Utils/logger'
 import { jidDecode } from '../WABinary'
 import type { LIDMappingStore } from './lid-mapping'
+import type { SessionActivityTracker } from './session-activity-tracker'
 
 /**
  * Session cleanup statistics
@@ -58,12 +59,14 @@ interface SessionMetadata {
  *
  * @param keys - Signal key store with transaction support
  * @param lidMapping - LID mapping store for orphan detection
+ * @param sessionActivityTracker - Session activity tracker for timestamp-based cleanup
  * @param logger - Structured logger instance
  * @param config - Cleanup configuration (uses defaults from env)
  */
 export const makeSessionCleanup = (
 	keys: SignalKeyStoreWithTransaction,
 	lidMapping: LIDMappingStore,
+	sessionActivityTracker: SessionActivityTracker | null,
 	logger: ILogger,
 	config: SessionCleanupConfig = DEFAULT_SESSION_CLEANUP_CONFIG
 ) => {
@@ -145,37 +148,59 @@ export const makeSessionCleanup = (
 		// Rule 1: LID orphans (no PN mapping) after X hours
 		if (metadata.isLID && metadata.hasLIDMapping === false) {
 			const thresholdMs = config.lidOrphanHours * 60 * 60 * 1000
-			// Since we don't have lastActivity, use createdAt or assume it's old enough
-			// In production, this would check actual activity timestamp
-			return {
-				cleanup: true,
-				reason: `LID orphan without PN mapping (${config.lidOrphanHours}h threshold)`
+
+			// Check if lastActivity is old enough
+			if (metadata.lastActivityMs) {
+				const inactiveDuration = now - metadata.lastActivityMs
+				if (inactiveDuration > thresholdMs) {
+					return {
+						cleanup: true,
+						reason: `LID orphan without PN mapping, inactive for ${Math.floor(inactiveDuration / 3600000)}h (threshold: ${config.lidOrphanHours}h)`
+					}
+				}
+			} else {
+				// No activity tracked - consider it old
+				return {
+					cleanup: true,
+					reason: `LID orphan without PN mapping, no activity tracked (threshold: ${config.lidOrphanHours}h)`
+				}
 			}
+
+			return { cleanup: false, reason: 'LID orphan but not inactive long enough' }
 		}
 
 		// Rule 2: Secondary devices inactive > X days
-		if (!metadata.isPrimary) {
-			// Since we don't have lastActivity timestamp in current implementation,
-			// we would need to track this separately or in session metadata
-			// For now, we'll implement the structure and log a warning
-			logger.debug(
-				{ jid: metadata.jid },
-				'Secondary device cleanup requires activity tracking (not yet implemented)'
-			)
-			return { cleanup: false, reason: 'Activity tracking not implemented' }
+		if (!metadata.isPrimary && metadata.lastActivityMs) {
+			const thresholdMs = config.secondaryDeviceInactiveDays * 24 * 60 * 60 * 1000
+			const inactiveDuration = now - metadata.lastActivityMs
+
+			if (inactiveDuration > thresholdMs) {
+				return {
+					cleanup: true,
+					reason: `Secondary device inactive for ${Math.floor(inactiveDuration / 86400000)} days (threshold: ${config.secondaryDeviceInactiveDays} days)`
+				}
+			}
+
+			return { cleanup: false, reason: `Secondary device active within ${config.secondaryDeviceInactiveDays} days` }
 		}
 
 		// Rule 3: Primary devices inactive > Y days
-		if (metadata.isPrimary) {
-			// Same as above - requires activity tracking
-			logger.debug(
-				{ jid: metadata.jid },
-				'Primary device cleanup requires activity tracking (not yet implemented)'
-			)
-			return { cleanup: false, reason: 'Activity tracking not implemented' }
+		if (metadata.isPrimary && metadata.lastActivityMs) {
+			const thresholdMs = config.primaryDeviceInactiveDays * 24 * 60 * 60 * 1000
+			const inactiveDuration = now - metadata.lastActivityMs
+
+			if (inactiveDuration > thresholdMs) {
+				return {
+					cleanup: true,
+					reason: `Primary device inactive for ${Math.floor(inactiveDuration / 86400000)} days (threshold: ${config.primaryDeviceInactiveDays} days)`
+				}
+			}
+
+			return { cleanup: false, reason: `Primary device active within ${config.primaryDeviceInactiveDays} days` }
 		}
 
-		return { cleanup: false, reason: 'No cleanup rules matched' }
+		// No lastActivity tracked - don't cleanup yet (grace period)
+		return { cleanup: false, reason: 'No activity tracked yet' }
 	}
 
 	/**
@@ -214,6 +239,16 @@ export const makeSessionCleanup = (
 
 			logger.info({ totalSessions: sessionKeys.length }, 'Scanning sessions for cleanup')
 
+			// Get all activity timestamps (if tracker available)
+			const activityMap = sessionActivityTracker
+				? await sessionActivityTracker.getAllActivities()
+				: new Map<string, number>()
+
+			logger.debug(
+				{ trackedActivities: activityMap.size },
+				'Loaded session activity timestamps'
+			)
+
 			// Prepare bulk deletion
 			const sessionsToDelete: string[] = []
 			const deletionReasons: { [key: string]: string } = {}
@@ -226,6 +261,9 @@ export const makeSessionCleanup = (
 						stats.errors++
 						continue
 					}
+
+					// Add lastActivity from tracker
+					metadata.lastActivityMs = activityMap.get(metadata.jid)
 
 					const { cleanup, reason } = shouldCleanupSession(metadata, Date.now())
 

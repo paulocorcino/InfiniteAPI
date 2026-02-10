@@ -14,6 +14,7 @@ import {
 	UPLOAD_TIMEOUT
 } from '../Defaults'
 import { makeSessionCleanup } from '../Signal/session-cleanup'
+import { makeSessionActivityTracker } from '../Signal/session-activity-tracker'
 import type { ConnectionState, LIDMapping, SocketConfig } from '../Types'
 import { DisconnectReason } from '../Types'
 import {
@@ -501,10 +502,14 @@ export const makeSocket = (config: SocketConfig) => {
 	const keys = addTransactionCapability(authState.keys, logger, transactionOpts)
 	const signalRepository = makeSignalRepository({ creds, keys }, logger, pnFromLIDUSync)
 
+	// Session activity tracker - tracks last activity for cleanup (must be created first)
+	const sessionActivityTracker = makeSessionActivityTracker(keys, logger)
+
 	// Session cleanup manager - removes inactive/orphaned sessions
 	const sessionCleanup = makeSessionCleanup(
 		keys,
 		signalRepository.lidMapping,
+		sessionActivityTracker,
 		logger,
 		DEFAULT_SESSION_CLEANUP_CONFIG
 	)
@@ -1092,6 +1097,9 @@ export const makeSocket = (config: SocketConfig) => {
 		// Stop session cleanup scheduler
 		sessionCleanup.stop()
 
+		// Stop session activity tracker and flush pending data
+		await sessionActivityTracker.stop()
+
 		// Clean up unified session manager
 		unifiedSessionManager?.destroy()
 
@@ -1464,6 +1472,9 @@ export const makeSocket = (config: SocketConfig) => {
 		// Start session cleanup scheduler
 		sessionCleanup.start()
 
+		// Start session activity tracker
+		sessionActivityTracker.start()
+
 		// Update server time offset from success node
 		const serverTime = extractServerTime(node)
 		if (serverTime) {
@@ -1589,6 +1600,7 @@ export const makeSocket = (config: SocketConfig) => {
 		authState: { creds, keys },
 		signalRepository,
 		sessionCleanup,
+		sessionActivityTracker,
 		get user() {
 			return authState.creds.me
 		},
