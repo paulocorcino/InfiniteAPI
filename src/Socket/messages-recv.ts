@@ -79,7 +79,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		enableCTWARecovery,
 		sessionCleanupConfig
 	} = config
-	const autoCleanCorrupted = (sessionCleanupConfig || DEFAULT_SESSION_CLEANUP_CONFIG).autoCleanCorrupted
+	// Use nullish coalescing to handle partial config properly
+	const autoCleanCorrupted = sessionCleanupConfig?.autoCleanCorrupted ?? DEFAULT_SESSION_CLEANUP_CONFIG.autoCleanCorrupted
 	const sock = makeMessagesSocket(config)
 	const {
 		ev,

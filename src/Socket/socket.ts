@@ -506,7 +506,11 @@ export const makeSocket = (config: SocketConfig) => {
 	const sessionActivityTracker = makeSessionActivityTracker(keys, logger)
 
 	// Session cleanup manager - removes inactive/orphaned sessions
-	const sessionCleanupConfig = config.sessionCleanupConfig || DEFAULT_SESSION_CLEANUP_CONFIG
+	// Merge user config with defaults to prevent partial overrides from breaking cleanup
+	const sessionCleanupConfig = {
+		...DEFAULT_SESSION_CLEANUP_CONFIG,
+		...(config.sessionCleanupConfig || {})
+	}
 	const sessionCleanup = makeSessionCleanup(
 		keys,
 		signalRepository.lidMapping,

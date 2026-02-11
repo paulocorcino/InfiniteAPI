@@ -254,6 +254,6 @@ export type SocketConfig = {
 	 */
 	enableUnifiedSession?: boolean
 
-	/** Session cleanup configuration (optional, uses DEFAULT_SESSION_CLEANUP_CONFIG if not provided) */
-	sessionCleanupConfig?: SessionCleanupConfig
+	/** Session cleanup configuration (optional, partial overrides merged with defaults) */
+	sessionCleanupConfig?: Partial<SessionCleanupConfig>
 }
