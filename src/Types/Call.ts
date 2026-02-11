@@ -11,4 +11,6 @@ export type WACallEvent = {
 	status: WACallUpdateType
 	offline: boolean
 	latencyMs?: number
+	/** Phone number of the caller (sanitized to fix Brazilian landline bug) */
+	callerPn?: string
 }
