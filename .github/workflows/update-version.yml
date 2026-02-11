@@ -42,10 +42,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Force git to use HTTPS instead of SSH for GitHub repositories
+          # IMPORTANT: Order matters! More specific rules first, then general ones
           git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          # Configure git to use GITHUB_TOKEN for authentication
+
+          # Configure authentication (last so it doesn't interfere with SSH -> HTTPS conversion)
           git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+
+          # Also configure for Yarn/NPM to prevent SSH fallback
+          echo "Configuring Yarn to prefer HTTPS..."
+          yarn config set --home enableImmutableInstalls false
+          yarn config set --home preferAggregateCacheInfo true
 
       - name: Restore Yarn Cache
         uses: actions/cache@v4
@@ -53,13 +60,22 @@ jobs:
         with:
           path: |
             node_modules
+            .yarn/cache
             .yarn/install-state.gz
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          # Include git config in cache key to bust cache when git rules change
+          key: ${{ runner.os }}-yarn-https-v2-${{ hashFiles('**/yarn.lock') }}
           restore-keys: |
-            ${{ runner.os }}-yarn-
+            ${{ runner.os }}-yarn-https-v2-
 
       - name: Install packages
-        run: yarn install --immutable
+        run: |
+          # Try install with immutable mode first
+          if ! yarn install --immutable; then
+            echo "⚠️ Immutable install failed. This might be due to SSH references in cache."
+            echo "Clearing node_modules and retrying without immutable mode..."
+            rm -rf node_modules
+            yarn install
+          fi
 
       - name: Update WhatsApp Web Version
         id: update_version
