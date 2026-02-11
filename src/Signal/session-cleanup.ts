@@ -28,6 +28,8 @@ export interface SessionCleanupConfig {
 	secondaryDeviceInactiveDays: number
 	primaryDeviceInactiveDays: number
 	lidOrphanHours: number
+	cleanupOnStartup: boolean
+	autoCleanCorrupted: boolean
 }
 
 /**
@@ -71,6 +73,7 @@ export const makeSessionCleanup = (
 	config: SessionCleanupConfig = DEFAULT_SESSION_CLEANUP_CONFIG
 ) => {
 	let cleanupInterval: ReturnType<typeof setInterval> | null = null
+	let initialTimeout: ReturnType<typeof setTimeout> | null = null
 	let lastCleanupAt: number = 0
 	let cleanupRunning: boolean = false
 
@@ -386,10 +389,20 @@ export const makeSessionCleanup = (
 				cleanupHour: config.cleanupHour,
 				secondaryDeviceInactiveDays: config.secondaryDeviceInactiveDays,
 				primaryDeviceInactiveDays: config.primaryDeviceInactiveDays,
-				lidOrphanHours: config.lidOrphanHours
+				lidOrphanHours: config.lidOrphanHours,
+				cleanupOnStartup: config.cleanupOnStartup,
+				autoCleanCorrupted: config.autoCleanCorrupted
 			},
 			'🧹 Session cleanup scheduler started'
 		)
+
+		// Run immediate cleanup on startup if enabled
+		if (config.cleanupOnStartup) {
+			logger.info('🚀 Running cleanup on startup...')
+			runCleanup().catch(err => {
+				logger.error({ err }, 'Cleanup on startup failed')
+			})
+		}
 
 		// Schedule first cleanup at configured hour
 		const msUntilFirst = msUntilNextCleanup()
@@ -398,7 +411,9 @@ export const makeSessionCleanup = (
 			'⏰ First cleanup scheduled'
 		)
 
-		setTimeout(async () => {
+		initialTimeout = setTimeout(async () => {
+			initialTimeout = null // Clear reference after execution
+
 			// Run first cleanup
 			await runCleanup()
 
@@ -413,6 +428,11 @@ export const makeSessionCleanup = (
 	 * Stop periodic session cleanup
 	 */
 	const stop = () => {
+		if (initialTimeout) {
+			clearTimeout(initialTimeout)
+			initialTimeout = null
+		}
+
 		if (cleanupInterval) {
 			clearInterval(cleanupInterval)
 			cleanupInterval = null

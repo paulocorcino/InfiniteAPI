@@ -202,17 +202,21 @@ export const DEFAULT_CACHE_MAX_KEYS = {
  * - BAILEYS_SESSION_CLEANUP_ENABLED: Enable/disable cleanup (default: true)
  * - BAILEYS_SESSION_CLEANUP_INTERVAL: Cleanup interval in ms (default: 24h)
  * - BAILEYS_SESSION_CLEANUP_HOUR: Hour to run cleanup (default: 3 = 3am)
- * - BAILEYS_SESSION_SECONDARY_INACTIVE_DAYS: Days before cleaning secondary devices (default: 15)
+ * - BAILEYS_SESSION_SECONDARY_INACTIVE_DAYS: Days before cleaning secondary devices (default: 7)
  * - BAILEYS_SESSION_PRIMARY_INACTIVE_DAYS: Days before cleaning primary device (default: 30)
  * - BAILEYS_SESSION_LID_ORPHAN_HOURS: Hours before cleaning orphaned LID sessions (default: 24)
+ * - BAILEYS_SESSION_CLEANUP_ON_STARTUP: Run cleanup immediately on startup (default: true)
+ * - BAILEYS_SESSION_AUTO_CLEAN_CORRUPTED: Auto-delete corrupted sessions (Bad MAC) (default: true)
  */
 export const DEFAULT_SESSION_CLEANUP_CONFIG = {
 	enabled: process.env.BAILEYS_SESSION_CLEANUP_ENABLED !== 'false',
 	intervalMs: parseInt(process.env.BAILEYS_SESSION_CLEANUP_INTERVAL || '86400000', 10), // 24h
 	cleanupHour: parseInt(process.env.BAILEYS_SESSION_CLEANUP_HOUR || '3', 10), // 3am
-	secondaryDeviceInactiveDays: parseInt(process.env.BAILEYS_SESSION_SECONDARY_INACTIVE_DAYS || '15', 10),
+	secondaryDeviceInactiveDays: parseInt(process.env.BAILEYS_SESSION_SECONDARY_INACTIVE_DAYS || '7', 10),
 	primaryDeviceInactiveDays: parseInt(process.env.BAILEYS_SESSION_PRIMARY_INACTIVE_DAYS || '30', 10),
-	lidOrphanHours: parseInt(process.env.BAILEYS_SESSION_LID_ORPHAN_HOURS || '24', 10)
+	lidOrphanHours: parseInt(process.env.BAILEYS_SESSION_LID_ORPHAN_HOURS || '24', 10),
+	cleanupOnStartup: process.env.BAILEYS_SESSION_CLEANUP_ON_STARTUP !== 'false',
+	autoCleanCorrupted: process.env.BAILEYS_SESSION_AUTO_CLEAN_CORRUPTED !== 'false'
 }
 
 // Re-export retry constants for backwards compatibility
