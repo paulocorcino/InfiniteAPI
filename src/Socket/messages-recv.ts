@@ -3,7 +3,7 @@ import { Boom } from '@hapi/boom'
 import { randomBytes } from 'crypto'
 import Long from 'long'
 import { proto } from '../../WAProto/index.js'
-import { DEFAULT_CACHE_TTLS, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT, STATUS_EXPIRY_SECONDS } from '../Defaults'
+import { DEFAULT_CACHE_TTLS, DEFAULT_SESSION_CLEANUP_CONFIG, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT, STATUS_EXPIRY_SECONDS } from '../Defaults'
 import { metrics, recordMessageReceived, recordHistorySyncMessages, recordMessageRetry, recordMessageFailure } from '../Utils/prometheus-metrics.js'
 import type {
 	GroupParticipant,
@@ -76,8 +76,10 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		getMessage,
 		shouldIgnoreJid,
 		enableAutoSessionRecreation,
-		enableCTWARecovery
+		enableCTWARecovery,
+		sessionCleanupConfig
 	} = config
+	const autoCleanCorrupted = (sessionCleanupConfig || DEFAULT_SESSION_CLEANUP_CONFIG).autoCleanCorrupted
 	const sock = makeMessagesSocket(config)
 	const {
 		ev,
@@ -1227,7 +1229,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			category,
 			author,
 			decrypt
-		} = decryptMessageNode(node, authState.creds.me!.id, authState.creds.me!.lid || '', signalRepository, logger)
+		} = decryptMessageNode(node, authState.creds.me!.id, authState.creds.me!.lid || '', signalRepository, logger, autoCleanCorrupted)
 
 		const alt = msg.key.participantAlt || msg.key.remoteJidAlt
 		// Handle LID/PN mappings with hybrid approach:

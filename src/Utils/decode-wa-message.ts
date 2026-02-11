@@ -1,6 +1,5 @@
 import { Boom } from '@hapi/boom'
 import { proto } from '../../WAProto/index.js'
-import { DEFAULT_SESSION_CLEANUP_CONFIG } from '../Defaults'
 import type { WAMessage, WAMessageKey } from '../Types'
 import type { SignalRepositoryWithLIDStore } from '../Types/Signal'
 import {
@@ -269,7 +268,8 @@ export const decryptMessageNode = (
 	meId: string,
 	meLid: string,
 	repository: SignalRepositoryWithLIDStore,
-	logger: ILogger
+	logger: ILogger,
+	autoCleanCorrupted: boolean = true
 ) => {
 	const { fullMessage, author, sender } = decodeMessageNode(stanza, meId, meLid)
 	return {
@@ -407,7 +407,7 @@ export const decryptMessageNode = (
 							)
 
 							// Automatic cleanup of corrupted session (if enabled)
-							if (DEFAULT_SESSION_CLEANUP_CONFIG.autoCleanCorrupted) {
+							if (autoCleanCorrupted) {
 								try {
 									await cleanupCorruptedSession(decryptionJid, repository, logger)
 									logger.info(
@@ -475,9 +475,21 @@ async function cleanupCorruptedSession(
 	// Build list of JIDs to delete (primary + secondary devices)
 	const jidsToDelete: string[] = []
 
-	// Determine if this is a LID or PN
-	const isLID = jid.endsWith('@lid')
-	const domain = isLID ? 'lid' : 's.whatsapp.net'
+	// Determine domain type correctly (handle hosted JIDs)
+	// JID formats:
+	//   - PN: user@s.whatsapp.net
+	//   - LID: user@lid
+	//   - Hosted PN: user@hosted
+	//   - Hosted LID: user@hosted.lid
+	const isLID = jid.endsWith('@lid') || jid.endsWith('@hosted.lid')
+	const isHosted = jid.includes('@hosted')
+
+	let domain: string
+	if (isLID) {
+		domain = isHosted ? 'hosted.lid' : 'lid'
+	} else {
+		domain = isHosted ? 'hosted' : 's.whatsapp.net'
+	}
 
 	// Primary device (0)
 	jidsToDelete.push(`${user}@${domain}`)

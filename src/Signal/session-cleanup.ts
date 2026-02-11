@@ -1,36 +1,12 @@
 import { DEFAULT_SESSION_CLEANUP_CONFIG } from '../Defaults'
-import type { SignalKeyStoreWithTransaction } from '../Types'
+import type { SessionCleanupConfig, SessionCleanupStats, SignalKeyStoreWithTransaction } from '../Types'
 import type { ILogger } from '../Utils/logger'
 import { jidDecode } from '../WABinary'
 import type { LIDMappingStore } from './lid-mapping'
 import type { SessionActivityTracker } from './session-activity-tracker'
 
-/**
- * Session cleanup statistics
- */
-export interface SessionCleanupStats {
-	totalScanned: number
-	secondaryDevicesDeleted: number
-	primaryDevicesDeleted: number
-	lidOrphansDeleted: number
-	totalDeleted: number
-	durationMs: number
-	errors: number
-}
-
-/**
- * Session cleanup configuration
- */
-export interface SessionCleanupConfig {
-	enabled: boolean
-	intervalMs: number
-	cleanupHour: number
-	secondaryDeviceInactiveDays: number
-	primaryDeviceInactiveDays: number
-	lidOrphanHours: number
-	cleanupOnStartup: boolean
-	autoCleanCorrupted: boolean
-}
+// Re-export for backward compatibility
+export type { SessionCleanupConfig, SessionCleanupStats }
 
 /**
  * Session metadata for cleanup decisions
@@ -76,6 +52,7 @@ export const makeSessionCleanup = (
 	let initialTimeout: ReturnType<typeof setTimeout> | null = null
 	let lastCleanupAt: number = 0
 	let cleanupRunning: boolean = false
+	let startupCleanupPromise: Promise<void> | null = null
 
 	/**
 	 * Get all sessions from database
@@ -399,8 +376,10 @@ export const makeSessionCleanup = (
 		// Run immediate cleanup on startup if enabled
 		if (config.cleanupOnStartup) {
 			logger.info('🚀 Running cleanup on startup...')
-			runCleanup().catch(err => {
+			startupCleanupPromise = runCleanup().catch(err => {
 				logger.error({ err }, 'Cleanup on startup failed')
+			}).then(() => {
+				startupCleanupPromise = null // Clear after completion
 			})
 		}
 
@@ -413,6 +392,12 @@ export const makeSessionCleanup = (
 
 		initialTimeout = setTimeout(async () => {
 			initialTimeout = null // Clear reference after execution
+
+			// Wait for startup cleanup to complete (if still running)
+			if (startupCleanupPromise) {
+				logger.debug('Waiting for startup cleanup to complete before scheduled cleanup...')
+				await startupCleanupPromise
+			}
 
 			// Run first cleanup
 			await runCleanup()
