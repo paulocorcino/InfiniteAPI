@@ -51,12 +51,14 @@ const storeMappingFromEnvelope = async (
 
 export const NO_MESSAGE_FOUND_ERROR_TEXT = 'Message absent from node'
 export const MISSING_KEYS_ERROR_TEXT = 'Key used already or never filled'
+export const BAD_MAC_ERROR_TEXT = 'Bad MAC'
 
 // Retry configuration for failed decryption
 export const DECRYPTION_RETRY_CONFIG = {
 	maxRetries: 3,
 	baseDelayMs: 100,
-	sessionRecordErrors: ['No session record', 'SessionError: No session record']
+	sessionRecordErrors: ['No session record', 'SessionError: No session record'],
+	corruptedSessionErrors: ['Bad MAC', 'MessageCounterError', MISSING_KEYS_ERROR_TEXT]
 }
 
 export const NACK_REASONS = {
@@ -72,7 +74,8 @@ export const NACK_REASONS = {
 	UnhandledError: 500,
 	UnsupportedAdminRevoke: 550,
 	UnsupportedLIDGroup: 551,
-	DBOperationFailed: 552
+	DBOperationFailed: 552,
+	CorruptedSession: 553
 }
 
 type MessageType =
@@ -326,16 +329,28 @@ export const decryptMessageNode = (
 							fullMessage.message = msg
 						}
 					} catch (err: any) {
+						const isCorrupted = isCorruptedSessionError(err)
+						const isSessionRecord = isSessionRecordError(err)
+
 						const errorContext = {
 							key: fullMessage.key,
 							err,
 							messageType: tag === 'plaintext' ? 'plaintext' : attrs.type,
 							sender,
 							author,
-							isSessionRecordError: isSessionRecordError(err)
+							decryptionJid,
+							isSessionRecordError: isSessionRecord,
+							isCorruptedSession: isCorrupted
 						}
 
-						logger.error(errorContext, 'failed to decrypt message')
+						if (isCorrupted) {
+							logger.error(
+								errorContext,
+								'⚠️ Corrupted session detected - Bad MAC or MessageCounter error. Session may need to be recreated.'
+							)
+						} else {
+							logger.error(errorContext, 'failed to decrypt message')
+						}
 
 						fullMessage.messageStubType = proto.WebMessageInfo.StubType.CIPHERTEXT
 						fullMessage.messageStubParameters = [err.message.toString()]
@@ -358,4 +373,13 @@ export const decryptMessageNode = (
 function isSessionRecordError(error: any): boolean {
 	const errorMessage = error?.message || error?.toString() || ''
 	return DECRYPTION_RETRY_CONFIG.sessionRecordErrors.some(errorPattern => errorMessage.includes(errorPattern))
+}
+
+/**
+ * Utility function to check if an error indicates a corrupted session
+ * (Bad MAC, MessageCounterError, Key already used)
+ */
+export function isCorruptedSessionError(error: any): boolean {
+	const errorMessage = error?.message || error?.toString() || ''
+	return DECRYPTION_RETRY_CONFIG.corruptedSessionErrors.some(errorPattern => errorMessage.includes(errorPattern))
 }
