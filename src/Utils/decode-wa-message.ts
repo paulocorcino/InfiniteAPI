@@ -19,7 +19,7 @@ import {
 } from '../WABinary'
 import { unpadRandomMax16 } from './generics'
 import type { ILogger } from './logger'
-import { retry, type RetryOptions } from './retry-utils'
+import { retry, type RetryOptions, RetryExhaustedError } from './retry-utils'
 
 export const getDecryptionJid = async (sender: string, repository: SignalRepositoryWithLIDStore): Promise<string> => {
 	if (isLidUser(sender) || isHostedLidUser(sender)) {
@@ -386,25 +386,43 @@ export const decryptMessageNode = (
 							fullMessage.message = msg
 						}
 					} catch (err: any) {
-						const isCorrupted = isCorruptedSessionError(err)
-						const isSessionRecord = isSessionRecordError(err)
+						// Check if this is a final failure after all retries exhausted
+						const isRetryExhausted = err instanceof RetryExhaustedError
+						const originalError = isRetryExhausted ? err.originalError : err
+
+						const isCorrupted = isCorruptedSessionError(originalError)
+						const isSessionRecord = isSessionRecordError(originalError)
 
 						const errorContext = {
 							key: fullMessage.key,
-							err,
+							err: originalError,
 							messageType: tag === 'plaintext' ? 'plaintext' : attrs.type,
 							sender,
 							author,
 							decryptionJid,
 							isSessionRecordError: isSessionRecord,
-							isCorruptedSession: isCorrupted
+							isCorruptedSession: isCorrupted,
+							...(isRetryExhausted && { retriesExhausted: true, attempts: err.attempts })
 						}
 
+						// Smart logging: Only show ERROR on final failure
+						// During retries, libsignal may log internally - we can't suppress those
+						// But we can avoid adding our own duplicate error logs for each retry
 						if (isCorrupted) {
-							logger.error(
-								errorContext,
-								'⚠️ Corrupted session detected - Bad MAC or MessageCounter error.'
-							)
+							// Corrupted session errors are expected and auto-recovered
+							// Only log as ERROR if this is the final failure after all retries
+							if (isRetryExhausted) {
+								logger.error(
+									errorContext,
+									`⚠️ Session corrupted and recovery failed after ${err.attempts} attempts. Auto-cleanup will attempt to recover.`
+								)
+							} else {
+								// First occurrence - log as warning since auto-recovery will attempt
+								logger.warn(
+									errorContext,
+									'⚠️ Corrupted session detected - attempting auto-recovery'
+								)
+							}
 
 							// Automatic cleanup of corrupted session (if enabled)
 							if (autoCleanCorrupted) {
@@ -412,21 +430,38 @@ export const decryptMessageNode = (
 									await cleanupCorruptedSession(decryptionJid, repository, logger)
 									logger.info(
 										{ decryptionJid, author },
-										'✅ Corrupted session cleaned up automatically. New session will be created on next message.'
+										'✅ Corrupted session cleaned up. New session will be created on next message.'
 									)
 								} catch (cleanupErr) {
 									logger.error(
 										{ decryptionJid, err: cleanupErr },
-										'Failed to cleanup corrupted session'
+										'❌ Failed to cleanup corrupted session'
 									)
 								}
 							}
+						} else if (isSessionRecord) {
+							// Session record errors are transient - retry should handle them
+							if (isRetryExhausted) {
+								logger.error(
+									errorContext,
+									`Failed to decrypt: No session record found after ${err.attempts} attempts`
+								)
+							} else {
+								logger.debug(errorContext, 'No session record - will retry')
+							}
 						} else {
-							logger.error(errorContext, 'failed to decrypt message')
+							// Unknown/unexpected error - always log as error
+							const logLevel = isRetryExhausted ? 'error' : 'warn'
+							logger[logLevel](
+								errorContext,
+								isRetryExhausted
+									? `Failed to decrypt message after ${err.attempts} attempts`
+									: 'Failed to decrypt message'
+							)
 						}
 
 						fullMessage.messageStubType = proto.WebMessageInfo.StubType.CIPHERTEXT
-						fullMessage.messageStubParameters = [err.message.toString()]
+						fullMessage.messageStubParameters = [originalError.message.toString()]
 					}
 				}
 			}

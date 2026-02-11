@@ -22,14 +22,33 @@ import { SenderKeyRecord } from './Group/sender-key-record'
 import { GroupCipher, GroupSessionBuilder, SenderKeyDistributionMessage } from './Group'
 import { LIDMappingStore } from './lid-mapping'
 
-// Suppress verbose "Closing session: SessionEntry {...}" logs from libsignal
-// These are raw console.log calls from the native Signal library that dump
-// cryptographic session details (keys, ratchets, etc.) on every encrypt/decrypt
+// Suppress verbose logs from libsignal native library
+// These are raw console.log calls that dump internal state and transient errors
+// that are already handled by our retry logic and session recovery system
 const _origConsoleLog = console.log
 console.log = function(...args: unknown[]) {
-	if (args.length > 0 && typeof args[0] === 'string' && args[0].startsWith('Closing session')) {
-		return // suppress libsignal session dump
+	if (args.length > 0 && typeof args[0] === 'string') {
+		const msg = args[0]
+
+		// Suppress session lifecycle dumps (cryptographic details on every encrypt/decrypt)
+		if (msg.startsWith('Closing session')) {
+			return
+		}
+
+		// Suppress transient decryption errors that are auto-recovered by retry logic
+		// These flood logs during normal operation when sessions are being re-established
+		// Final failures are still logged via our structured logger (see decode-wa-message.ts)
+		if (
+			msg.includes('Session error') ||
+			msg.includes('Bad MAC') ||
+			msg.includes('MessageCounterError') ||
+			msg.includes('Key used already or never filled') ||
+			msg.includes('Failed to decrypt message with any known session')
+		) {
+			return // suppress - our retry system handles these gracefully
+		}
 	}
+
 	_origConsoleLog.apply(console, args)
 }
 
