@@ -30,22 +30,29 @@ console.log = function(...args: unknown[]) {
 	if (args.length > 0 && typeof args[0] === 'string') {
 		const msg = args[0]
 
-		// Suppress session lifecycle dumps (cryptographic details on every encrypt/decrypt)
-		if (msg.startsWith('Closing session')) {
-			return
-		}
+		// Check if this log comes from libsignal by examining the call stack
+		// This prevents suppressing unrelated logs from other modules
+		const stack = new Error().stack || ''
+		const isFromLibsignal = stack.includes('libsignal') || stack.includes('session_cipher')
 
-		// Suppress transient decryption errors that are auto-recovered by retry logic
-		// These flood logs during normal operation when sessions are being re-established
-		// Final failures are still logged via our structured logger (see decode-wa-message.ts)
-		if (
-			msg.includes('Session error') ||
-			msg.includes('Bad MAC') ||
-			msg.includes('MessageCounterError') ||
-			msg.includes('Key used already or never filled') ||
-			msg.includes('Failed to decrypt message with any known session')
-		) {
-			return // suppress - our retry system handles these gracefully
+		if (isFromLibsignal) {
+			// Suppress session lifecycle dumps (cryptographic details on every encrypt/decrypt)
+			if (msg.startsWith('Closing session')) {
+				return
+			}
+
+			// Suppress transient decryption errors that are auto-recovered by retry logic
+			// These flood logs during normal operation when sessions are being re-established
+			// Final failures are still logged via our structured logger (see decode-wa-message.ts)
+			if (
+				msg.includes('Session error') ||
+				msg.includes('Bad MAC') ||
+				msg.includes('MessageCounterError') ||
+				msg.includes('Key used already or never filled') ||
+				msg.includes('Failed to decrypt message with any known session')
+			) {
+				return // suppress - our retry system handles these gracefully
+			}
 		}
 	}
 

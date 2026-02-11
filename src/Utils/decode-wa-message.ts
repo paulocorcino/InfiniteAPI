@@ -405,12 +405,10 @@ export const decryptMessageNode = (
 							...(isRetryExhausted && { retriesExhausted: true, attempts: err.attempts })
 						}
 
-						// Smart logging: Only show ERROR on final failure
-						// During retries, libsignal may log internally - we can't suppress those
-						// But we can avoid adding our own duplicate error logs for each retry
+						// Smart logging based on error type and retry status
 						if (isCorrupted) {
 							// Corrupted session errors are expected and auto-recovered
-							// Only log as ERROR if this is the final failure after all retries
+							// Only log as ERROR if retries exhausted, otherwise WARN on first attempt
 							if (isRetryExhausted) {
 								logger.error(
 									errorContext,
@@ -450,9 +448,10 @@ export const decryptMessageNode = (
 								logger.debug(errorContext, 'No session record - will retry')
 							}
 						} else {
-							// Unknown/unexpected error - always log as error
-							const logLevel = isRetryExhausted ? 'error' : 'warn'
-							logger[logLevel](
+							// Unknown/unexpected errors (protobuf, parsing, etc.)
+							// These don't go through retry, so always log as ERROR
+							// Type-safe explicit logging instead of dynamic property access
+							logger.error(
 								errorContext,
 								isRetryExhausted
 									? `Failed to decrypt message after ${err.attempts} attempts`
@@ -461,7 +460,8 @@ export const decryptMessageNode = (
 						}
 
 						fullMessage.messageStubType = proto.WebMessageInfo.StubType.CIPHERTEXT
-						fullMessage.messageStubParameters = [originalError.message.toString()]
+						// Safe coercion handling edge cases where message might be undefined
+						fullMessage.messageStubParameters = [String(originalError?.message ?? originalError)]
 					}
 				}
 			}
