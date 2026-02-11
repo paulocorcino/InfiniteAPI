@@ -1600,6 +1600,73 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		}
 	}
 
+	/**
+	 * Sanitizes caller phone number to fix known decoder bugs
+	 *
+	 * Brazilian Phone Format:
+	 * - Mobile: 55 + DD + 9XXXXXXXX (13 digits total)
+	 *   Example: 5515991000000 (55 + 15 + 991000000)
+	 * - Landline: 55 + DD + XXXXXXXX (12 digits total)
+	 *   Example: 551541410000 (55 + 15 + 41410000)
+	 *
+	 * Decoder Bug: Landlines incorrectly get trailing zero
+	 * Example: 551738025555 → 5517380255550 (should be 12, not 13)
+	 *
+	 * Detection Logic:
+	 * - Extract first digit after DDD (position 4 in string)
+	 * - If digit is 2-5: It's a LANDLINE
+	 *   → 13 digits is ERROR → Remove trailing zero
+	 * - If digit is 6-9: It's a MOBILE
+	 *   → 13 digits is CORRECT → Don't touch!
+	 *
+	 * @param pn - Raw phone number from caller_pn attribute
+	 * @returns Sanitized phone number
+	 */
+	const sanitizeCallerPn = (pn: string | undefined): string | undefined => {
+		if (!pn) {
+			return undefined
+		}
+
+		// Only process Brazilian numbers (country code 55)
+		if (!pn.startsWith('55')) {
+			return pn
+		}
+
+		// Check if it's a 13-digit number (potential landline bug)
+		if (pn.length === 13) {
+			// Extract first digit after DDD (position 4)
+			// Format: 55 DD X...
+			//         01 23 4...
+			const firstDigitAfterDDD = pn.charAt(4)
+
+			// Landline: first digit is 2-5
+			// If 13 digits, it's an error (should be 12) - remove trailing zero
+			if (['2', '3', '4', '5'].includes(firstDigitAfterDDD)) {
+				// Extra validation: only sanitize if ends with 0 (the bug pattern)
+				if (pn.endsWith('0')) {
+					const sanitized = pn.slice(0, -1)
+					logger.debug(
+						{ original: pn, sanitized, firstDigit: firstDigitAfterDDD, type: 'landline' },
+						'Call: Sanitized Brazilian landline number (removed trailing zero)'
+					)
+					return sanitized
+				}
+			}
+
+			// Mobile: first digit is 6-9
+			// 13 digits is CORRECT for mobile - don't sanitize!
+			if (['6', '7', '8', '9'].includes(firstDigitAfterDDD)) {
+				logger.trace(
+					{ pn, firstDigit: firstDigitAfterDDD, type: 'mobile' },
+					'Call: Valid Brazilian mobile number (13 digits correct, not sanitizing)'
+				)
+				return pn
+			}
+		}
+
+		return pn
+	}
+
 	const handleCall = async (node: BinaryNode) => {
 		const { attrs } = node
 		const [infoChild] = getAllBinaryNodeChildren(node)
@@ -1625,6 +1692,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			call.isVideo = !!getBinaryNodeChild(infoChild, 'video')
 			call.isGroup = infoChild.attrs.type === 'group' || !!infoChild.attrs['group-jid']
 			call.groupJid = infoChild.attrs['group-jid']
+			// Extract and sanitize caller phone number
+			call.callerPn = sanitizeCallerPn(infoChild.attrs['caller_pn'])
 			await callOfferCache.set(call.id, call)
 		}
 
@@ -1634,6 +1703,9 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		if (existingCall) {
 			call.isVideo = existingCall.isVideo
 			call.isGroup = existingCall.isGroup
+			call.groupJid = existingCall.groupJid
+			// Preserve callerPn across call state updates
+			call.callerPn = call.callerPn || existingCall.callerPn
 		}
 
 		// delete data once call has ended
