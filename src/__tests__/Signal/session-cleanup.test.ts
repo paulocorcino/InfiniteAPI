@@ -37,7 +37,9 @@ describe('SessionCleanup', () => {
 			cleanupHour: 3,
 			secondaryDeviceInactiveDays: 15,
 			primaryDeviceInactiveDays: 30,
-			lidOrphanHours: 24
+			lidOrphanHours: 24,
+			cleanupOnStartup: false,
+			autoCleanCorrupted: false
 		}
 
 		it('should delete LID orphan after 24h of inactivity', async () => {
@@ -168,7 +170,9 @@ describe('SessionCleanup', () => {
 			cleanupHour: 3,
 			secondaryDeviceInactiveDays: 15,
 			primaryDeviceInactiveDays: 30,
-			lidOrphanHours: 24
+			lidOrphanHours: 24,
+			cleanupOnStartup: false,
+			autoCleanCorrupted: false
 		}
 
 		it('should delete secondary device (Web/Desktop) after 15 days', async () => {
@@ -257,7 +261,9 @@ describe('SessionCleanup', () => {
 			cleanupHour: 3,
 			secondaryDeviceInactiveDays: 15,
 			primaryDeviceInactiveDays: 30,
-			lidOrphanHours: 24
+			lidOrphanHours: 24,
+			cleanupOnStartup: false,
+			autoCleanCorrupted: false
 		}
 
 		it('should delete primary device after 30 days', async () => {
@@ -323,7 +329,9 @@ describe('SessionCleanup', () => {
 			cleanupHour: 3,
 			secondaryDeviceInactiveDays: 15,
 			primaryDeviceInactiveDays: 30,
-			lidOrphanHours: 24
+			lidOrphanHours: 24,
+			cleanupOnStartup: false,
+			autoCleanCorrupted: false
 		}
 
 		it('should handle exactly 24h for LID orphan (boundary)', async () => {
@@ -408,7 +416,9 @@ describe('SessionCleanup', () => {
 			cleanupHour: 3,
 			secondaryDeviceInactiveDays: 15,
 			primaryDeviceInactiveDays: 30,
-			lidOrphanHours: 24
+			lidOrphanHours: 24,
+			cleanupOnStartup: false,
+			autoCleanCorrupted: false
 		}
 
 		it('should delete multiple sessions of different types', async () => {
@@ -462,7 +472,9 @@ describe('SessionCleanup', () => {
 				cleanupHour: 3,
 				secondaryDeviceInactiveDays: 15,
 				primaryDeviceInactiveDays: 30,
-				lidOrphanHours: 24
+				lidOrphanHours: 24,
+				cleanupOnStartup: false,
+				autoCleanCorrupted: false
 			}
 
 			// @ts-ignore
@@ -491,7 +503,9 @@ describe('SessionCleanup', () => {
 				cleanupHour: 3,
 				secondaryDeviceInactiveDays: 5, // Custom: 5 days
 				primaryDeviceInactiveDays: 10, // Custom: 10 days
-				lidOrphanHours: 12 // Custom: 12 hours
+				lidOrphanHours: 12, // Custom: 12 hours
+				cleanupOnStartup: false,
+				autoCleanCorrupted: false
 			}
 
 			const now = Date.now()

@@ -3,6 +3,7 @@ import type { URL } from 'url'
 import { proto } from '../../WAProto/index.js'
 import type { ILogger } from '../Utils/logger'
 import type { CircuitBreakerOptions } from '../Utils/circuit-breaker'
+import type { SessionCleanupConfig } from './SessionCleanup'
 import type { AuthenticationState, LIDMapping, SignalAuthState, TransactionCapabilityOptions } from './Auth'
 import type { GroupMetadata } from './GroupMetadata'
 import { type MediaConnInfo, type WAMessageKey } from './Message'
@@ -252,4 +253,7 @@ export type SocketConfig = {
 	 * @see https://github.com/WhiskeySockets/Baileys/pull/2294
 	 */
 	enableUnifiedSession?: boolean
+
+	/** Session cleanup configuration (optional, partial overrides merged with defaults) */
+	sessionCleanupConfig?: Partial<SessionCleanupConfig>
 }

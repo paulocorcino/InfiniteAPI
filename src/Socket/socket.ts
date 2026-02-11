@@ -506,12 +506,17 @@ export const makeSocket = (config: SocketConfig) => {
 	const sessionActivityTracker = makeSessionActivityTracker(keys, logger)
 
 	// Session cleanup manager - removes inactive/orphaned sessions
+	// Merge user config with defaults to prevent partial overrides from breaking cleanup
+	const sessionCleanupConfig = {
+		...DEFAULT_SESSION_CLEANUP_CONFIG,
+		...(config.sessionCleanupConfig || {})
+	}
 	const sessionCleanup = makeSessionCleanup(
 		keys,
 		signalRepository.lidMapping,
 		sessionActivityTracker,
 		logger,
-		DEFAULT_SESSION_CLEANUP_CONFIG
+		sessionCleanupConfig
 	)
 
 	let lastDateRecv: Date
