@@ -62,9 +62,19 @@ jobs:
             .yarn/cache
             .yarn/install-state.gz
           # Include git config in cache key to bust cache when git rules change
-          key: ${{ runner.os }}-yarn-https-v2-${{ hashFiles('**/yarn.lock') }}
+          key: ${{ runner.os }}-yarn-https-v3-${{ hashFiles('**/yarn.lock') }}
           restore-keys: |
-            ${{ runner.os }}-yarn-https-v2-
+            ${{ runner.os }}-yarn-https-v3-
+
+      - name: Fix libsignal URL for Yarn
+        run: |
+          # Yarn 4.x ignores git config and converts git+https:// to SSH
+          # Temporarily replace git+https:// with direct HTTPS tarball URL
+          echo "🔧 Patching package.json to use HTTPS instead of git+https://"
+          sed -i 's|"libsignal": "git+https://github.com/whiskeysockets/libsignal-node"|"libsignal": "https://github.com/whiskeysockets/libsignal-node/archive/refs/heads/master.tar.gz"|g' package.json
+
+          # Verify change
+          grep libsignal package.json
 
       - name: Install packages
         run: |
