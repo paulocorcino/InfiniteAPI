@@ -3,13 +3,14 @@ import { Boom } from '@hapi/boom'
 import { randomBytes } from 'crypto'
 import Long from 'long'
 import { proto } from '../../WAProto/index.js'
-import { DEFAULT_CACHE_TTLS, DEFAULT_SESSION_CLEANUP_CONFIG, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT, STATUS_EXPIRY_SECONDS } from '../Defaults'
+import { DEFAULT_CACHE_TTLS, DEFAULT_SESSION_CLEANUP_CONFIG, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT, PLACEHOLDER_MAX_AGE_SECONDS, STATUS_EXPIRY_SECONDS } from '../Defaults'
 import { metrics, recordMessageReceived, recordHistorySyncMessages, recordMessageRetry, recordMessageFailure } from '../Utils/prometheus-metrics.js'
 import type {
 	GroupParticipant,
 	MessageReceiptType,
 	MessageRelayOptions,
 	MessageUserReceipt,
+	PlaceholderMessageData,
 	SocketConfig,
 	WACallEvent,
 	WAMessage,
@@ -155,21 +156,28 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		return sendPeerDataOperationMessage(pdoMessage)
 	}
 
-	const requestPlaceholderResend = async (messageKey: WAMessageKey): Promise<string | undefined> => {
+	const requestPlaceholderResend = async (
+		messageKey: WAMessageKey,
+		msgData?: PlaceholderMessageData
+	): Promise<string | undefined> => {
 		if (!authState.creds.me?.id) {
 			throw new Boom('Not authenticated')
 		}
 
-		if (await placeholderResendCache.get(messageKey?.id!)) {
+		// Check if already requested using message ID to prevent duplicate PDO requests
+		const alreadyRequested = await placeholderResendCache.get<PlaceholderMessageData | boolean>(messageKey?.id!)
+		if (alreadyRequested) {
 			logger.debug({ messageKey }, 'already requested resend')
 			return
-		} else {
-			await placeholderResendCache.set(messageKey?.id!, true)
 		}
+
+		// Temporarily mark as requested using message ID to prevent race conditions
+		await placeholderResendCache.set(messageKey?.id!, true)
 
 		await delay(2000)
 
-		if (!(await placeholderResendCache.get(messageKey?.id!))) {
+		// Check if message was received during delay
+		if (!(await placeholderResendCache.get<PlaceholderMessageData | boolean>(messageKey?.id!))) {
 			logger.debug({ messageKey }, 'message received while resend requested')
 			return 'RESOLVED'
 		}
@@ -183,14 +191,31 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			peerDataOperationRequestType: proto.Message.PeerDataOperationRequestType.PLACEHOLDER_MESSAGE_RESEND
 		}
 
+		// Send PDO and get stanzaId (PDO request ID)
+		const stanzaId = await sendPeerDataOperationMessage(pdoMessage)
+
+		// CRITICAL FIX: Store metadata using stanzaId (not messageKey.id)
+		// The PDO response will use stanzaId to identify which request it's responding to
+		if (msgData && stanzaId) {
+			await placeholderResendCache.set(stanzaId, msgData)
+			logger.debug(
+				{ messageKey: messageKey.id, stanzaId },
+				'CTWA: Cached metadata using stanzaId for PDO response lookup'
+			)
+		}
+
+		// Clean up message ID marker after storing with stanzaId
+		await placeholderResendCache.del(messageKey?.id!)
+
+		// Cleanup timeout: if no response after 8s, assume phone is offline
 		setTimeout(async () => {
-			if (await placeholderResendCache.get(messageKey?.id!)) {
-				logger.debug({ messageKey }, 'PDO message without response after 8 seconds. Phone possibly offline')
-				await placeholderResendCache.del(messageKey?.id!)
+			if (await placeholderResendCache.get<PlaceholderMessageData | boolean>(stanzaId)) {
+				logger.debug({ stanzaId }, 'PDO message without response after 8 seconds. Phone possibly offline')
+				await placeholderResendCache.del(stanzaId)
 			}
 		}, 8_000)
 
-		return sendPeerDataOperationMessage(pdoMessage)
+		return stanzaId
 	}
 
 	// Handles mex newsletter notifications
@@ -1313,13 +1338,26 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					// These messages are only encrypted for the primary phone, not linked devices
 					// We need to request the message content from the phone via PDO (Peer Data Operation)
 					if (msg.messageStubParameters?.[0] === NO_MESSAGE_FOUND_ERROR_TEXT) {
+						// Skip unavailable fanout types - these messages will never have content available
+						// These are system messages that cannot be decrypted or retrieved
+						const messageType = msg.messageStubParameters?.[2]
+						if (messageType === 'bot_unavailable_fanout' ||
+							messageType === 'hosted_unavailable_fanout' ||
+							messageType === 'view_once_unavailable_fanout') {
+							logger.debug(
+								{ msgId: msg.key?.id, messageType },
+								'CTWA: Skipping placeholder resend for unavailable fanout type'
+							)
+							metrics.ctwaRecoveryFailures.inc({ reason: 'unavailable_fanout' })
+							return sendMessageAck(node)
+						}
+
 						// Skip old messages - don't request resend for messages older than 7 days
 						const messageAge = unixTimestampSeconds() - toNumber(msg.messageTimestamp)
-						const MAX_PLACEHOLDER_RESEND_AGE = 7 * 24 * 60 * 60 // 7 days in seconds
 
-						if (messageAge > MAX_PLACEHOLDER_RESEND_AGE) {
+						if (messageAge > PLACEHOLDER_MAX_AGE_SECONDS) {
 							logger.debug(
-								{ msgId: msg.key?.id, messageAge, maxAge: MAX_PLACEHOLDER_RESEND_AGE },
+								{ msgId: msg.key?.id, messageAge, maxAge: PLACEHOLDER_MAX_AGE_SECONDS },
 								'CTWA: Skipping placeholder resend for old message'
 							)
 							metrics.ctwaRecoveryFailures.inc({ reason: 'message_too_old' })
@@ -1330,6 +1368,17 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 							const startTime = Date.now()
 							const msgId = msg.key.id!
 							const msgKey = msg.key
+
+							// Prepare metadata to preserve original message details
+							// The phone may not send all metadata in PDO response (e.g., pushName, participantAlt)
+							// Caching these ensures we don't lose critical information like sender name and LID mappings
+							const msgData: PlaceholderMessageData = {
+								key: { ...msgKey },
+								pushName: msg.pushName,
+								messageTimestamp: msg.messageTimestamp,
+								participant: msg.key.participant,
+								participantAlt: msg.key.participantAlt
+							}
 
 							logger.info(
 								{ msgId, remoteJid: msgKey.remoteJid, messageAge },
@@ -1344,7 +1393,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 								messageRetryManager.schedulePhoneRequest(msgId, async () => {
 									try {
-										const requestId = await requestPlaceholderResend(msgKey)
+										const requestId = await requestPlaceholderResend(msgKey, msgData)
 										if (requestId && requestId !== 'RESOLVED') {
 											logger.debug(
 												{ msgId, requestId },
@@ -1382,7 +1431,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 								metrics.ctwaRecoveryRequests.inc({ status: 'requested' })
 
 								try {
-									const requestId = await requestPlaceholderResend(msgKey)
+									const requestId = await requestPlaceholderResend(msgKey, msgData)
 									if (requestId && requestId !== 'RESOLVED') {
 										logger.debug(
 											{ msgId, requestId },

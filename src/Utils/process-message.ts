@@ -1,3 +1,4 @@
+import Long from 'long'
 import { proto } from '../../WAProto/index.js'
 import type {
 	AuthenticationCreds,
@@ -8,6 +9,7 @@ import type {
 	GroupParticipant,
 	LIDMapping,
 	ParticipantAction,
+	PlaceholderMessageData,
 	RequestJoinAction,
 	RequestJoinMethod,
 	SignalKeyStoreWithTransaction,
@@ -440,9 +442,17 @@ const processMessage = async (
 			case proto.Message.ProtocolMessage.Type.PEER_DATA_OPERATION_REQUEST_RESPONSE_MESSAGE:
 				const response = protocolMsg.peerDataOperationRequestResponseMessage
 				if (response) {
+					// Retrieve cached metadata BEFORE deletion
+					// This preserves original message details that the phone might not send
+					const cachedData = response.stanzaId
+						? await placeholderResendCache?.get<PlaceholderMessageData | boolean>(response.stanzaId)
+						: undefined
+
+					// Clean up cache after retrieving data
 					if (response.stanzaId) {
 						await placeholderResendCache?.del(response.stanzaId)
 					}
+
 					// TODO: IMPLEMENT HISTORY SYNC ETC (sticker uploads etc.).
 					const { peerDataOperationResult } = response
 					if (!peerDataOperationResult) {
@@ -460,13 +470,55 @@ const processMessage = async (
 
 							const webMessageInfo = proto.WebMessageInfo.decode(retryResponse.webMessageInfoBytes)
 
+							// Merge cached metadata with decoded message
+							// This ensures we don't lose critical information like pushName and LID mappings
+							if (cachedData && typeof cachedData === 'object') {
+								// Preserve pushName if not present in PDO response
+								if (cachedData.pushName && !webMessageInfo.pushName) {
+									webMessageInfo.pushName = cachedData.pushName
+									logger?.debug(
+										{ msgId: webMessageInfo.key?.id },
+										'CTWA: Restored pushName from cached metadata'
+									)
+								}
+
+								// Preserve participantAlt (LID) if not present in PDO response
+								// This is critical for maintaining LID/PN mapping in groups
+								if (cachedData.participantAlt && webMessageInfo.key) {
+									const msgKey = webMessageInfo.key as WAMessageKey
+									if (!msgKey.participantAlt) {
+										msgKey.participantAlt = cachedData.participantAlt
+										logger?.debug(
+											{ msgId: webMessageInfo.key?.id, participantAlt: cachedData.participantAlt },
+											'CTWA: Restored participantAlt (LID) from cached metadata'
+										)
+									}
+								}
+
+								// Preserve original participant if not in PDO response
+								if (cachedData.participant && webMessageInfo.key && !webMessageInfo.key.participant) {
+									webMessageInfo.key.participant = cachedData.participant
+									logger?.debug(
+										{ msgId: webMessageInfo.key?.id },
+										'CTWA: Restored participant from cached metadata'
+									)
+								}
+
+								// Only use cached timestamp if PDO response doesn't have one
+								// PDO response timestamp is more authoritative if present
+								if (!webMessageInfo.messageTimestamp && cachedData.messageTimestamp) {
+									webMessageInfo.messageTimestamp = cachedData.messageTimestamp
+								}
+							}
+
 							// Track CTWA message recovery success
 							recoveredCount++
 							logger?.info(
 								{
 									msgId: webMessageInfo.key?.id,
 									remoteJid: webMessageInfo.key?.remoteJid,
-									requestId: response.stanzaId
+									requestId: response.stanzaId,
+									hasMetadata: !!cachedData && typeof cachedData === 'object'
 								},
 								'CTWA: Successfully recovered message via placeholder resend'
 							)

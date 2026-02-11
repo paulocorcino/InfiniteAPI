@@ -1,5 +1,6 @@
 import type { Readable } from 'stream'
 import type { URL } from 'url'
+import Long from 'long'
 import { proto } from '../../WAProto/index.js'
 import type { MediaType } from '../Defaults'
 import type { BinaryNode } from '../WABinary'
@@ -24,6 +25,16 @@ export type WAMessageKey = proto.IMessageKey & {
 	addressingMode?: string
 	isViewOnce?: boolean // TODO: remove out of the message key, place in WebMessageInfo
 }
+
+/** Metadata cached for CTWA placeholder resend to preserve original message details */
+export type PlaceholderMessageData = {
+	key: WAMessageKey
+	pushName?: string | null
+	messageTimestamp?: number | Long | null
+	participant?: string | null
+	participantAlt?: string | null
+}
+
 export type WATextMessage = proto.Message.IExtendedTextMessage
 export type WAContextInfo = proto.IContextInfo
 export type WALocationMessage = proto.Message.ILocationMessage
