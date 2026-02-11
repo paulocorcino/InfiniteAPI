@@ -10,6 +10,7 @@ import type {
 	MessageReceiptType,
 	MessageRelayOptions,
 	MessageUserReceipt,
+	PlaceholderMessageData,
 	SocketConfig,
 	WACallEvent,
 	WAMessage,
@@ -155,15 +156,6 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		return sendPeerDataOperationMessage(pdoMessage)
 	}
 
-	/** Metadata cached for placeholder resend to preserve original message details */
-	type PlaceholderMessageData = {
-		key: WAMessageKey
-		pushName?: string | null
-		messageTimestamp?: number | Long | null
-		participant?: string | null
-		participantAlt?: string | null
-	}
-
 	const requestPlaceholderResend = async (
 		messageKey: WAMessageKey,
 		msgData?: PlaceholderMessageData
@@ -172,18 +164,19 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			throw new Boom('Not authenticated')
 		}
 
-		const cachedData = await placeholderResendCache.get<PlaceholderMessageData | boolean>(messageKey?.id!)
-		if (cachedData) {
+		// Check if already requested using message ID to prevent duplicate PDO requests
+		const alreadyRequested = await placeholderResendCache.get<PlaceholderMessageData | boolean>(messageKey?.id!)
+		if (alreadyRequested) {
 			logger.debug({ messageKey }, 'already requested resend')
 			return
-		} else {
-			// Store full message data if provided, otherwise store true for backward compatibility
-			await placeholderResendCache.set(messageKey?.id!, msgData || true)
 		}
+
+		// Temporarily mark as requested using message ID to prevent race conditions
+		await placeholderResendCache.set(messageKey?.id!, true)
 
 		await delay(2000)
 
-		// Check if message was received or cache was cleared during delay
+		// Check if message was received during delay
 		if (!(await placeholderResendCache.get<PlaceholderMessageData | boolean>(messageKey?.id!))) {
 			logger.debug({ messageKey }, 'message received while resend requested')
 			return 'RESOLVED'
@@ -198,15 +191,31 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			peerDataOperationRequestType: proto.Message.PeerDataOperationRequestType.PLACEHOLDER_MESSAGE_RESEND
 		}
 
+		// Send PDO and get stanzaId (PDO request ID)
+		const stanzaId = await sendPeerDataOperationMessage(pdoMessage)
+
+		// CRITICAL FIX: Store metadata using stanzaId (not messageKey.id)
+		// The PDO response will use stanzaId to identify which request it's responding to
+		if (msgData && stanzaId) {
+			await placeholderResendCache.set(stanzaId, msgData)
+			logger.debug(
+				{ messageKey: messageKey.id, stanzaId },
+				'CTWA: Cached metadata using stanzaId for PDO response lookup'
+			)
+		}
+
+		// Clean up message ID marker after storing with stanzaId
+		await placeholderResendCache.del(messageKey?.id!)
+
 		// Cleanup timeout: if no response after 8s, assume phone is offline
 		setTimeout(async () => {
-			if (await placeholderResendCache.get<PlaceholderMessageData | boolean>(messageKey?.id!)) {
-				logger.debug({ messageKey }, 'PDO message without response after 8 seconds. Phone possibly offline')
-				await placeholderResendCache.del(messageKey?.id!)
+			if (await placeholderResendCache.get<PlaceholderMessageData | boolean>(stanzaId)) {
+				logger.debug({ stanzaId }, 'PDO message without response after 8 seconds. Phone possibly offline')
+				await placeholderResendCache.del(stanzaId)
 			}
 		}, 8_000)
 
-		return sendPeerDataOperationMessage(pdoMessage)
+		return stanzaId
 	}
 
 	// Handles mex newsletter notifications

@@ -9,6 +9,7 @@ import type {
 	GroupParticipant,
 	LIDMapping,
 	ParticipantAction,
+	PlaceholderMessageData,
 	RequestJoinAction,
 	RequestJoinMethod,
 	SignalKeyStoreWithTransaction,
@@ -443,15 +444,8 @@ const processMessage = async (
 				if (response) {
 					// Retrieve cached metadata BEFORE deletion
 					// This preserves original message details that the phone might not send
-					type CachedMessageData = {
-						key: WAMessageKey
-						pushName?: string | null
-						messageTimestamp?: number | Long | null
-						participant?: string | null
-						participantAlt?: string | null
-					}
 					const cachedData = response.stanzaId
-						? await placeholderResendCache?.get<CachedMessageData | boolean>(response.stanzaId)
+						? await placeholderResendCache?.get<PlaceholderMessageData | boolean>(response.stanzaId)
 						: undefined
 
 					// Clean up cache after retrieving data
