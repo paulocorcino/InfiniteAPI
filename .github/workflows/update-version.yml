@@ -49,10 +49,9 @@ jobs:
           # Configure authentication (last so it doesn't interfere with SSH -> HTTPS conversion)
           git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
 
-          # Also configure for Yarn/NPM to prevent SSH fallback
-          echo "Configuring Yarn to prefer HTTPS..."
-          yarn config set --home enableImmutableInstalls false
-          yarn config set --home preferAggregateCacheInfo true
+          # Verify git config applied correctly
+          echo "✅ Git URL rewrites configured for HTTPS"
+          git config --global --get-regexp url
 
       - name: Restore Yarn Cache
         uses: actions/cache@v4
