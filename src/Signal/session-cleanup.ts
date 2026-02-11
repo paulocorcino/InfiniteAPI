@@ -71,6 +71,7 @@ export const makeSessionCleanup = (
 	config: SessionCleanupConfig = DEFAULT_SESSION_CLEANUP_CONFIG
 ) => {
 	let cleanupInterval: ReturnType<typeof setInterval> | null = null
+	let initialTimeout: ReturnType<typeof setTimeout> | null = null
 	let lastCleanupAt: number = 0
 	let cleanupRunning: boolean = false
 
@@ -398,7 +399,9 @@ export const makeSessionCleanup = (
 			'⏰ First cleanup scheduled'
 		)
 
-		setTimeout(async () => {
+		initialTimeout = setTimeout(async () => {
+			initialTimeout = null // Clear reference after execution
+
 			// Run first cleanup
 			await runCleanup()
 
@@ -413,6 +416,11 @@ export const makeSessionCleanup = (
 	 * Stop periodic session cleanup
 	 */
 	const stop = () => {
+		if (initialTimeout) {
+			clearTimeout(initialTimeout)
+			initialTimeout = null
+		}
+
 		if (cleanupInterval) {
 			clearInterval(cleanupInterval)
 			cleanupInterval = null
