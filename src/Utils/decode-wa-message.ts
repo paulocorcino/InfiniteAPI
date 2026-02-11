@@ -1,5 +1,6 @@
 import { Boom } from '@hapi/boom'
 import { proto } from '../../WAProto/index.js'
+import { DEFAULT_SESSION_CLEANUP_CONFIG } from '../Defaults'
 import type { WAMessage, WAMessageKey } from '../Types'
 import type { SignalRepositoryWithLIDStore } from '../Types/Signal'
 import {
@@ -13,11 +14,13 @@ import {
 	isJidNewsletter,
 	isJidStatusBroadcast,
 	isLidUser,
-	isPnUser
+	isPnUser,
+	jidDecode
 	//	transferDevice
 } from '../WABinary'
 import { unpadRandomMax16 } from './generics'
 import type { ILogger } from './logger'
+import { retry, type RetryOptions } from './retry-utils'
 
 export const getDecryptionJid = async (sender: string, repository: SignalRepositoryWithLIDStore): Promise<string> => {
 	if (isLidUser(sender) || isHostedLidUser(sender)) {
@@ -59,6 +62,37 @@ export const DECRYPTION_RETRY_CONFIG = {
 	baseDelayMs: 100,
 	sessionRecordErrors: ['No session record', 'SessionError: No session record'],
 	corruptedSessionErrors: ['Bad MAC', 'MessageCounterError', MISSING_KEYS_ERROR_TEXT]
+}
+
+/**
+ * Retry options for decryption operations
+ * Uses exponential backoff with jitter to handle transient failures
+ */
+export const DECRYPTION_RETRY_OPTIONS: RetryOptions = {
+	maxAttempts: 3,
+	baseDelay: 200, // 200ms base delay
+	maxDelay: 2000, // 2s max delay
+	backoffStrategy: 'exponential',
+	backoffMultiplier: 2,
+	jitter: 0.2, // 20% jitter
+	collectMetrics: false, // No Prometheus metrics
+	operationName: 'message_decryption',
+	shouldRetry: (error: Error, attempt: number) => {
+		const errorMsg = error?.message || ''
+
+		// Always retry on session record errors (session might be syncing)
+		if (DECRYPTION_RETRY_CONFIG.sessionRecordErrors.some(err => errorMsg.includes(err))) {
+			return attempt < 3 // Retry up to 3 times
+		}
+
+		// Don't retry on corrupted session errors (need cleanup first)
+		if (DECRYPTION_RETRY_CONFIG.corruptedSessionErrors.some(err => errorMsg.includes(err))) {
+			return false
+		}
+
+		// Retry other transient errors
+		return attempt < 2 // Retry up to 2 times for unknown errors
+	}
 }
 
 export const NACK_REASONS = {
@@ -284,21 +318,44 @@ export const decryptMessageNode = (
 					try {
 						const e2eType = tag === 'plaintext' ? 'plaintext' : attrs.type
 
+						// Wrap decryption in retry logic for transient failures
 						switch (e2eType) {
 							case 'skmsg':
-								msgBuffer = await repository.decryptGroupMessage({
-									group: sender,
-									authorJid: author,
-									msg: content
-								})
+								msgBuffer = await retry(
+									() => repository.decryptGroupMessage({
+										group: sender,
+										authorJid: author,
+										msg: content
+									}),
+									{
+										...DECRYPTION_RETRY_OPTIONS,
+										onRetry: (error, attempt, delay) => {
+											logger.debug(
+												{ error: error.message, attempt, delay, group: sender, author },
+												'Retrying group message decryption'
+											)
+										}
+									}
+								)
 								break
 							case 'pkmsg':
 							case 'msg':
-								msgBuffer = await repository.decryptMessage({
-									jid: decryptionJid,
-									type: e2eType,
-									ciphertext: content
-								})
+								msgBuffer = await retry(
+									() => repository.decryptMessage({
+										jid: decryptionJid,
+										type: e2eType,
+										ciphertext: content
+									}),
+									{
+										...DECRYPTION_RETRY_OPTIONS,
+										onRetry: (error, attempt, delay) => {
+											logger.debug(
+												{ error: error.message, attempt, delay, jid: decryptionJid, type: e2eType },
+												'Retrying message decryption'
+											)
+										}
+									}
+								)
 								break
 							case 'plaintext':
 								msgBuffer = content
@@ -346,8 +403,24 @@ export const decryptMessageNode = (
 						if (isCorrupted) {
 							logger.error(
 								errorContext,
-								'⚠️ Corrupted session detected - Bad MAC or MessageCounter error. Session may need to be recreated.'
+								'⚠️ Corrupted session detected - Bad MAC or MessageCounter error.'
 							)
+
+							// Automatic cleanup of corrupted session (if enabled)
+							if (DEFAULT_SESSION_CLEANUP_CONFIG.autoCleanCorrupted) {
+								try {
+									await cleanupCorruptedSession(decryptionJid, repository, logger)
+									logger.info(
+										{ decryptionJid, author },
+										'✅ Corrupted session cleaned up automatically. New session will be created on next message.'
+									)
+								} catch (cleanupErr) {
+									logger.error(
+										{ decryptionJid, err: cleanupErr },
+										'Failed to cleanup corrupted session'
+									)
+								}
+							}
 						} else {
 							logger.error(errorContext, 'failed to decrypt message')
 						}
@@ -382,4 +455,47 @@ function isSessionRecordError(error: any): boolean {
 export function isCorruptedSessionError(error: any): boolean {
 	const errorMessage = error?.message || error?.toString() || ''
 	return DECRYPTION_RETRY_CONFIG.corruptedSessionErrors.some(errorPattern => errorMessage.includes(errorPattern))
+}
+
+/**
+ * Clean up corrupted session by deleting all device sessions for a JID
+ * Signal Protocol will automatically recreate the session on next message
+ */
+async function cleanupCorruptedSession(
+	jid: string,
+	repository: SignalRepositoryWithLIDStore,
+	logger: ILogger
+): Promise<void> {
+	const { user, device } = jidDecode(jid) || {}
+	if (!user) {
+		logger.warn({ jid }, 'Cannot cleanup session - invalid JID')
+		return
+	}
+
+	// Build list of JIDs to delete (primary + secondary devices)
+	const jidsToDelete: string[] = []
+
+	// Determine if this is a LID or PN
+	const isLID = jid.endsWith('@lid')
+	const domain = isLID ? 'lid' : 's.whatsapp.net'
+
+	// Primary device (0)
+	jidsToDelete.push(`${user}@${domain}`)
+
+	// Secondary devices (1-5 common range for Web/Desktop/etc)
+	for (let i = 1; i <= 5; i++) {
+		jidsToDelete.push(`${user}:${i}@${domain}`)
+	}
+
+	// If specific device was identified and > 5, ensure it's included
+	if (device !== undefined && device > 5) {
+		jidsToDelete.push(`${user}:${device}@${domain}`)
+	}
+
+	await repository.deleteSession(jidsToDelete)
+
+	logger.debug(
+		{ jid, user, device, deletedSessions: jidsToDelete },
+		'Deleted corrupted sessions for user'
+	)
 }
