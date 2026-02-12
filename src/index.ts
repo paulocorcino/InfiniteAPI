@@ -30,7 +30,7 @@ console.log = function(...args: unknown[]) {
 				msg.includes('Failed to decrypt')
 			) {
 				// Extract error type
-				let errorType = '⚠️  Session Error'
+				let errorType = '⚠️ Session Error'
 				if (msg.includes('Bad MAC')) errorType = '🔐 Bad MAC Error'
 				else if (msg.includes('MessageCounterError') || msg.includes('Key used already')) errorType = '🔢 Counter Error'
 				else if (msg.includes('Failed to decrypt')) errorType = '🔌 Decryption Failed'
@@ -74,15 +74,17 @@ console.error = function(...args: unknown[]) {
 				msg.includes('Session error') ||
 				msg.includes('Bad MAC') ||
 				msg.includes('MessageCounterError') ||
-				msg.includes('Key used already')
+				msg.includes('Key used already') ||
+				msg.includes('Failed to decrypt')
 			) {
 				// Extract error type
-				let errorType = '⚠️  Session Error'
+				let errorType = '⚠️ Session Error'
 				if (msg.includes('Bad MAC')) errorType = '🔐 Bad MAC Error'
 				else if (msg.includes('MessageCounterError') || msg.includes('Key used already')) errorType = '🔢 Counter Error'
+				else if (msg.includes('Failed to decrypt')) errorType = '🔌 Decryption Failed'
 
 				// Extract JID from stack trace or message
-				const jidMatch = (msg + (args[1] || '')).match(/(\d{10,}(?:_\d+\.\d+)?)/);
+				const jidMatch = (msg + String(args[1] ?? '')).match(/(\d{10,}(?:_\d+\.\d+)?)/);
 				const jid = jidMatch ? jidMatch[1] : null
 				const maskedJid = jid && jid.length > 8 ? `${jid.substring(0, 4)}****${jid.substring(jid.length - 4)}` : jid
 
