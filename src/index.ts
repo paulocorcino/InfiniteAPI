@@ -2,7 +2,6 @@
 // Format session error logs from libsignal BEFORE any imports
 // This MUST be at the very top to intercept console before libsignal loads
 // ============================================
-const _origConsoleLog = console.log
 const _origConsoleError = console.error
 
 // Track errors by type + JID to avoid duplicates (using Map for better performance)
@@ -36,7 +35,7 @@ console.error = function(...args: unknown[]) {
 				else if (msg.includes('Failed to decrypt')) errorType = '🔌 Decryption Failed'
 
 				// Extract JID from stack trace or message
-				const jidMatch = (msg + String(args[1] ?? '')).match(/(\d{10,}(?:_\d+\.\d+)?)/);
+				const jidMatch = (msg + String(args[1] ?? '')).match(/(\d{10,}(?:_\d+\.\d+)?)/)
 				const jid = jidMatch ? jidMatch[1] : null
 				const maskedJid = jid && jid.length > 8 ? `${jid.substring(0, 4)}****${jid.substring(jid.length - 4)}` : jid
 
@@ -45,8 +44,8 @@ console.error = function(...args: unknown[]) {
 					? `${errorType} | JID: ${maskedJid}`
 					: errorType
 
-				// Deduplication key: type + JID (prevents duplicate logs for same error type on same contact)
-				const dedupeKey = `${errorType}:${maskedJid || 'unknown'}`
+				// Deduplication key: type + ORIGINAL JID (use unmasked to prevent collisions)
+				const dedupeKey = `${errorType}:${jid || 'unknown'}`
 				const now = Date.now()
 				const lastTime = _errorTimestamps.get(dedupeKey)
 

@@ -427,13 +427,16 @@ export const decryptMessageNode = (
 								try {
 									const deletedCount = await cleanupCorruptedSession(decryptionJid, repository, logger)
 
-									// Mask JID for privacy (show first 4 and last 4 digits)
-									const maskedJid = decryptionJid.length > 8
-										? `${decryptionJid.substring(0, 4)}****${decryptionJid.substring(decryptionJid.length - 4)}`
-										: decryptionJid
+									// Mask only user portion of JID for privacy (preserve domain info)
+									const { user, server } = jidDecode(decryptionJid) || {}
+									const maskedUser = user && user.length > 8
+										? `${user.substring(0, 4)}****${user.substring(user.length - 4)}`
+										: user
+									const maskedJid = maskedUser && server ? `${maskedUser}@${server}` : decryptionJid
 
 									logger.info(
-										`🔄 Session Reset | JID: ${maskedJid} | Cleared: ${deletedCount} devices | Will recreate on next message`
+										{ jid: decryptionJid, maskedJid, targetedDevices: deletedCount },
+										`🔄 Session Reset | JID: ${maskedJid} | Targeted: ${deletedCount} devices | Will recreate on next message`
 									)
 								} catch (cleanupErr) {
 									logger.error(
