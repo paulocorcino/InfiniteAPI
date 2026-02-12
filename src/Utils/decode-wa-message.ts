@@ -425,10 +425,18 @@ export const decryptMessageNode = (
 							// Automatic cleanup of corrupted session (if enabled)
 							if (autoCleanCorrupted) {
 								try {
-									await cleanupCorruptedSession(decryptionJid, repository, logger)
+									const deletedCount = await cleanupCorruptedSession(decryptionJid, repository, logger)
+
+									// Mask only user portion of JID for privacy (preserve domain info)
+									const { user, server } = jidDecode(decryptionJid) || {}
+									const maskedUser = user && user.length > 8
+										? `${user.substring(0, 4)}****${user.substring(user.length - 4)}`
+										: user
+									const maskedJid = maskedUser && server ? `${maskedUser}@${server}` : decryptionJid
+
 									logger.info(
-										{ decryptionJid, author },
-										'✅ Corrupted session cleaned up. New session will be created on next message.'
+										{ jid: decryptionJid, maskedJid, targetedDevices: deletedCount },
+										`🔄 Session Reset | JID: ${maskedJid} | Targeted: ${deletedCount} devices | Will recreate on next message`
 									)
 								} catch (cleanupErr) {
 									logger.error(
@@ -500,11 +508,11 @@ async function cleanupCorruptedSession(
 	jid: string,
 	repository: SignalRepositoryWithLIDStore,
 	logger: ILogger
-): Promise<void> {
+): Promise<number> {
 	const { user, device } = jidDecode(jid) || {}
 	if (!user) {
 		logger.warn({ jid }, 'Cannot cleanup session - invalid JID')
-		return
+		return 0
 	}
 
 	// Build list of JIDs to delete (primary + secondary devices)
@@ -541,8 +549,5 @@ async function cleanupCorruptedSession(
 
 	await repository.deleteSession(jidsToDelete)
 
-	logger.debug(
-		{ jid, user, device, deletedSessions: jidsToDelete },
-		'Deleted corrupted sessions for user'
-	)
+	return jidsToDelete.length
 }
