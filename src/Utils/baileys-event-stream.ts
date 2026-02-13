@@ -334,7 +334,14 @@ export class BaileysEventStream extends EventEmitter {
 	/**
 	 * Register handler for event type
 	 */
-	on<T = unknown>(event: BaileysEventType | '*', handler: EventHandler<T>): this {
+	on<T = unknown>(event: BaileysEventType | '*' | 'backpressure' | 'drain' | 'dropped' | 'batch-processed' | 'retry', handler: EventHandler<T>): this {
+		// For control events (backpressure, drain, etc), use native EventEmitter
+		if (event === 'backpressure' || event === 'drain' || event === 'dropped' || event === 'batch-processed' || event === 'retry') {
+			super.on(event, handler as any)
+			return this
+		}
+
+		// For Baileys events, use custom handler system
 		if (!this.handlers.has(event)) {
 			this.handlers.set(event, new Set())
 		}
@@ -345,7 +352,14 @@ export class BaileysEventStream extends EventEmitter {
 	/**
 	 * Remove handler
 	 */
-	off(event: BaileysEventType | '*', handler: EventHandler): this {
+	off(event: BaileysEventType | '*' | 'backpressure' | 'drain' | 'dropped' | 'batch-processed' | 'retry', handler: EventHandler): this {
+		// For control events, use native EventEmitter
+		if (event === 'backpressure' || event === 'drain' || event === 'dropped' || event === 'batch-processed' || event === 'retry') {
+			super.off(event, handler as any)
+			return this
+		}
+
+		// For Baileys events, use custom handler system
 		const handlers = this.handlers.get(event)
 		if (handlers) {
 			handlers.delete(handler)
