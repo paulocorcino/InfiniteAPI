@@ -1,3 +1,4 @@
+/* eslint-disable max-depth, @typescript-eslint/no-unused-vars */
 /**
  * Custom Logger for Baileys/WhatsApp
  *

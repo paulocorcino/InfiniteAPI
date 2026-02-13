@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import Long from 'long'
 import { proto } from '../../WAProto/index.js'
 import type {

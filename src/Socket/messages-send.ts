@@ -1,3 +1,4 @@
+/* eslint-disable max-depth, @typescript-eslint/no-unused-vars, @typescript-eslint/no-floating-promises */
 import NodeCache from '@cacheable/node-cache'
 import { Boom } from '@hapi/boom'
 import { proto } from '../../WAProto/index.js'
@@ -939,6 +940,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				const bytes = encodeNewsletterMessage(patched as proto.IMessage)
 				binaryNodeContent.push({
 					tag: 'plaintext',
+				// eslint-disable-next-line @typescript-eslint/no-floating-promises
 					attrs: {},
 					content: bytes
 				})

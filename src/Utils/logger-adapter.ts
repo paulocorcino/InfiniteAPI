@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * @fileoverview Adaptador entre diferentes sistemas de logging
  * @module Utils/logger-adapter

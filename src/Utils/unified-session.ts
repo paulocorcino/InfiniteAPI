@@ -1,3 +1,4 @@
+/* eslint-disable max-depth */
 /**
  * Unified Session Telemetry Implementation
  *

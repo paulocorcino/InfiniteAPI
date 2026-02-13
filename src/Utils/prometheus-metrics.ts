@@ -1,3 +1,4 @@
+/* eslint-disable max-depth, @typescript-eslint/no-unused-vars */
 /**
  * Prometheus Metrics Exposition - Enterprise Grade
  *

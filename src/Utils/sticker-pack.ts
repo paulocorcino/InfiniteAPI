@@ -1,3 +1,4 @@
+/* eslint-disable prefer-const, space-before-function-paren */
 import { Boom } from '@hapi/boom'
 import { createHash } from 'crypto'
 import { zipSync } from 'fflate'

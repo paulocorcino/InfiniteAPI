@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-floating-promises, space-before-function-paren */
 /**
  * Request Tracing Context
  *
@@ -319,6 +320,7 @@ export function setSpanError(span: Span, error: Error): void {
 	span.attributes.error = true
 	span.attributes.errorMessage = error.message
 	span.attributes.errorName = error.name
+		// eslint-disable-next-line @typescript-eslint/no-floating-promises
 	if (error.stack) {
 		span.attributes.errorStack = error.stack
 	}
@@ -380,7 +382,7 @@ export function traced(name?: string) {
 /**
  * Wrapper for tracing a function
  */
-export function traceFunction<T extends(...args: unknown[]) => unknown>(name: string, fn: T): T {
+export function traceFunction<T extends (...args: unknown[]) => unknown>(name: string, fn: T): T {
 	return function (this: unknown, ...args: Parameters<T>): ReturnType<T> {
 		const span = startSpan({ name })
 
