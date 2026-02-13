@@ -1,3 +1,4 @@
+/* eslint-disable max-depth, @typescript-eslint/no-unused-vars */
 import { LRUCache } from 'lru-cache'
 import type { LIDMapping, SignalKeyStoreWithTransaction } from '../Types'
 import type { ILogger } from '../Utils/logger'

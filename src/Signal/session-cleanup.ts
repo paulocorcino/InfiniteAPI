@@ -1,3 +1,4 @@
+/* eslint-disable max-depth, @typescript-eslint/no-unused-vars */
 import { DEFAULT_SESSION_CLEANUP_CONFIG } from '../Defaults'
 import type { SessionCleanupConfig, SessionCleanupStats, SignalKeyStoreWithTransaction } from '../Types'
 import type { ILogger } from '../Utils/logger'

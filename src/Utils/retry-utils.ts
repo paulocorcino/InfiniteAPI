@@ -1,3 +1,4 @@
+/* eslint-disable prefer-const */
 /**
  * Smart Retry Logic
  *
@@ -451,7 +452,7 @@ export function withRetry(options: RetryOptions = {}) {
 /**
  * Wrapper for function with retry
  */
-export function retryable<T extends(...args: unknown[]) => unknown>(
+export function retryable<T extends (...args: unknown[]) => unknown>(
 	fn: T,
 	options: RetryOptions = {}
 ): (...args: Parameters<T>) => Promise<ReturnType<T>> {

@@ -1,3 +1,4 @@
+/* eslint-disable max-depth */
 import NodeCache from '@cacheable/node-cache'
 import { Boom } from '@hapi/boom'
 import { LRUCache } from 'lru-cache'
