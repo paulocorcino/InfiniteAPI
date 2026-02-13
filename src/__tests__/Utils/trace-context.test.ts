@@ -255,8 +255,8 @@ describe('Spans', () => {
 			addSpanEvent(span, 'event-occurred', { detail: 'value' })
 
 			expect(span.events).toHaveLength(1)
-			expect(span.events[0].name).toBe('event-occurred')
-			expect(span.events[0].attributes).toEqual({ detail: 'value' })
+			expect(span.events[0]!.name).toBe('event-occurred')
+			expect(span.events[0]!.attributes).toEqual({ detail: 'value' })
 		})
 
 		it('should not add event to ended span', () => {
