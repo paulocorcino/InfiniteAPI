@@ -381,6 +381,7 @@ export function traced(name?: string) {
 /**
  * Wrapper for tracing a function
  */
+// eslint-disable-next-line space-before-function-paren
 export function traceFunction<T extends (...args: unknown[]) => unknown>(name: string, fn: T): T {
 	return function (this: unknown, ...args: Parameters<T>): ReturnType<T> {
 		const span = startSpan({ name })
