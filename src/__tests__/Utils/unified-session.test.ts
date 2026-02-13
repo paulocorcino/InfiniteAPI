@@ -5,15 +5,15 @@
  * official WhatsApp Web client telemetry behavior.
  */
 
-import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals'
-import type { BinaryNode } from '../../WABinary/types.js'
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import {
-	UnifiedSessionManager,
 	createUnifiedSessionManager,
 	extractServerTime,
 	shouldEnableUnifiedSession,
+	UnifiedSessionManager,
 	type UnifiedSessionOptions
 } from '../../Utils/unified-session.js'
+import type { BinaryNode } from '../../WABinary/types.js'
 
 // TimeMs constants for testing (matching unified-session.ts)
 const TimeMs = {
@@ -21,7 +21,7 @@ const TimeMs = {
 	Minute: 60_000,
 	Hour: 3_600_000,
 	Day: 86_400_000,
-	Week: 604_800_000,
+	Week: 604_800_000
 } as const
 
 // Mock the prometheus metrics to avoid side effects
@@ -203,7 +203,7 @@ describe('UnifiedSessionManager', () => {
 
 			expect(mockSendNode).toHaveBeenCalledTimes(1)
 
-			const sentNode = mockSendNode.mock.calls[0]?.[0] as BinaryNode | undefined
+			const sentNode = mockSendNode.mock.calls[0]?.[0]
 			expect(sentNode).toBeDefined()
 			expect(sentNode!.tag).toBe('ib')
 			expect(Array.isArray(sentNode!.content)).toBe(true)

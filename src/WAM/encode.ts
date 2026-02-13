@@ -78,11 +78,12 @@ function encodeEvents(binaryInfo: BinaryInfo) {
 			}
 
 			const fieldFlag = extended ? FLAG_EVENT : FLAG_FIELD | FLAG_EXTENDED
+			// eslint-disable-next-line eqeqeq
 			if (id == null) {
-			continue
-		}
+				continue
+			}
 
-		binaryInfo.buffer.push(serializeData(id, value, fieldFlag))
+			binaryInfo.buffer.push(serializeData(id, value, fieldFlag))
 		}
 	}
 }

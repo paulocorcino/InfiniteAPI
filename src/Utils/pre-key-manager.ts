@@ -168,7 +168,8 @@ export class PreKeyManager {
 			this.logger.debug('PreKeyManager already destroyed')
 			return
 		}
-		this.destroyed = true  // ← Set IMMEDIATELY to close race window
+
+		this.destroyed = true // ← Set IMMEDIATELY to close race window
 
 		this.logger.debug('🗑️ Destroying PreKeyManager')
 

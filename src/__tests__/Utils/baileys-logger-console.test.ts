@@ -2,20 +2,20 @@
  * Unit tests for baileys-logger.ts console-friendly logging functions
  */
 
-import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals'
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import {
-	logEventBuffer,
-	logBufferMetrics,
-	logMessageSent,
-	logMessageReceived,
-	logConnection,
 	logAuth,
+	logBufferMetrics,
 	logCircuitBreaker,
-	logRetry,
-	logInfo,
-	logWarn,
+	logConnection,
 	logError,
+	logEventBuffer,
+	logInfo,
 	logLidMapping,
+	logMessageReceived,
+	logMessageSent,
+	logRetry,
+	logWarn
 } from '../../Utils/baileys-logger.js'
 
 describe('Baileys Console Logging Functions', () => {
@@ -99,7 +99,7 @@ describe('Baileys Console Logging Functions', () => {
 				itemsBuffered: 50,
 				flushCount: 100,
 				historyCacheSize: 200,
-				buffersInProgress: 1,
+				buffersInProgress: 1
 			})
 			expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('📊 Buffer Metrics'))
 			expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('itemsBuffered: 50'))
@@ -116,8 +116,8 @@ describe('Baileys Console Logging Functions', () => {
 					mode: 'aggressive',
 					timeout: 1000,
 					eventRate: 1.34,
-					isHealthy: true,
-				},
+					isHealthy: true
+				}
 			})
 			expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("mode: 'aggressive'"))
 			expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('timeout: 1000'))

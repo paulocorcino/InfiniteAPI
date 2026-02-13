@@ -28,10 +28,12 @@ const parseNewsletterCreateResponse = (response: NewsletterCreateResponse): News
 		invite: thread.invite || '',
 		subscribers: parseInt(thread.subscribers_count, 10) || 0,
 		verification: thread.verification,
-		picture: thread.picture ? {
-			id: thread.picture.id || '',
-			directPath: thread.picture.direct_path || ''
-		} : { id: '', directPath: '' },
+		picture: thread.picture
+			? {
+					id: thread.picture.id || '',
+					directPath: thread.picture.direct_path || ''
+				}
+			: { id: '', directPath: '' },
 		mute_state: viewer?.mute
 	}
 }

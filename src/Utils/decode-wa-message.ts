@@ -19,7 +19,7 @@ import {
 } from '../WABinary'
 import { unpadRandomMax16 } from './generics'
 import type { ILogger } from './logger'
-import { retry, type RetryOptions, RetryExhaustedError } from './retry-utils'
+import { retry, RetryExhaustedError, type RetryOptions } from './retry-utils'
 
 export const getDecryptionJid = async (sender: string, repository: SignalRepositoryWithLIDStore): Promise<string> => {
 	if (isLidUser(sender) || isHostedLidUser(sender)) {
@@ -269,7 +269,7 @@ export const decryptMessageNode = (
 	meLid: string,
 	repository: SignalRepositoryWithLIDStore,
 	logger: ILogger,
-	autoCleanCorrupted: boolean = true
+	autoCleanCorrupted = true
 ) => {
 	const { fullMessage, author, sender } = decodeMessageNode(stanza, meId, meLid)
 	return {
@@ -322,11 +322,12 @@ export const decryptMessageNode = (
 						switch (e2eType) {
 							case 'skmsg':
 								msgBuffer = await retry(
-									() => repository.decryptGroupMessage({
-										group: sender,
-										authorJid: author,
-										msg: content
-									}),
+									() =>
+										repository.decryptGroupMessage({
+											group: sender,
+											authorJid: author,
+											msg: content
+										}),
 									{
 										...DECRYPTION_RETRY_OPTIONS,
 										onRetry: (error, attempt, delay) => {
@@ -341,11 +342,12 @@ export const decryptMessageNode = (
 							case 'pkmsg':
 							case 'msg':
 								msgBuffer = await retry(
-									() => repository.decryptMessage({
-										jid: decryptionJid,
-										type: e2eType,
-										ciphertext: content
-									}),
+									() =>
+										repository.decryptMessage({
+											jid: decryptionJid,
+											type: e2eType,
+											ciphertext: content
+										}),
 									{
 										...DECRYPTION_RETRY_OPTIONS,
 										onRetry: (error, attempt, delay) => {
@@ -416,10 +418,7 @@ export const decryptMessageNode = (
 								)
 							} else {
 								// First occurrence - log as warning since auto-recovery will attempt
-								logger.warn(
-									errorContext,
-									'⚠️ Corrupted session detected - attempting auto-recovery'
-								)
+								logger.warn(errorContext, '⚠️ Corrupted session detected - attempting auto-recovery')
 							}
 
 							// Automatic cleanup of corrupted session (if enabled)
@@ -429,9 +428,8 @@ export const decryptMessageNode = (
 
 									// Mask only user portion of JID for privacy (preserve domain info)
 									const { user, server } = jidDecode(decryptionJid) || {}
-									const maskedUser = user && user.length > 8
-										? `${user.substring(0, 4)}****${user.substring(user.length - 4)}`
-										: user
+									const maskedUser =
+										user && user.length > 8 ? `${user.substring(0, 4)}****${user.substring(user.length - 4)}` : user
 									const maskedJid = maskedUser && server ? `${maskedUser}@${server}` : decryptionJid
 
 									logger.info(
@@ -439,19 +437,13 @@ export const decryptMessageNode = (
 										`🔄 Session Reset | JID: ${maskedJid} | Targeted: ${deletedCount} devices | Will recreate on next message`
 									)
 								} catch (cleanupErr) {
-									logger.error(
-										{ decryptionJid, err: cleanupErr },
-										'❌ Failed to cleanup corrupted session'
-									)
+									logger.error({ decryptionJid, err: cleanupErr }, '❌ Failed to cleanup corrupted session')
 								}
 							}
 						} else if (isSessionRecord) {
 							// Session record errors are transient - retry should handle them
 							if (isRetryExhausted) {
-								logger.error(
-									errorContext,
-									`Failed to decrypt: No session record found after ${err.attempts} attempts`
-								)
+								logger.error(errorContext, `Failed to decrypt: No session record found after ${err.attempts} attempts`)
 							} else {
 								logger.debug(errorContext, 'No session record - will retry')
 							}

@@ -47,8 +47,8 @@ import {
 	getRawMediaUploadData,
 	type MediaDownloadOptions
 } from './messages-media'
-import { prepareStickerPackMessage } from './sticker-pack.js'
 import { shouldIncludeReportingToken } from './reporting-utils'
+import { prepareStickerPackMessage } from './sticker-pack.js'
 
 type ExtractByKey<T, K extends PropertyKey> = T extends Record<K, any> ? T : never
 type RequireKey<T, K extends keyof T> = T & {
@@ -260,7 +260,10 @@ export const prepareWAMessageMedia = async (
 		})(),
 		(async () => {
 			try {
-				if ((requiresThumbnailComputation || requiresDurationComputation || requiresWaveformProcessing) && !originalFilePath) {
+				if (
+					(requiresThumbnailComputation || requiresDurationComputation || requiresWaveformProcessing) &&
+					!originalFilePath
+				) {
 					throw new Boom('Missing file path for processing')
 				}
 
@@ -513,7 +516,7 @@ export const generateButtonMessage = async (
 	// Determine header configuration
 	const hasMedia = !!(headerImage || headerVideo)
 	const header: proto.Message.InteractiveMessage.IHeader = {
-		title: hasMedia ? '' : (headerTitle || ''),
+		title: hasMedia ? '' : headerTitle || '',
 		subtitle: '',
 		hasMediaAttachment: hasMedia
 	}
@@ -635,34 +638,36 @@ export const generateCarouselMessage = async (
 	}
 
 	// Map cards to the carousel format (processing media)
-	const carouselCards = await Promise.all(cards.map(async (card) => {
-		const hasMedia = !!(card.image || card.video)
+	const carouselCards = await Promise.all(
+		cards.map(async card => {
+			const hasMedia = !!(card.image || card.video)
 
-		const header: any = {
-			title: card.title || '',
-			hasMediaAttachment: hasMedia
-		}
-
-		// Process media if present
-		if (hasMedia && mediaOptions) {
-			if (card.image) {
-				const { imageMessage } = await prepareWAMessageMedia({ image: card.image }, mediaOptions)
-				header.imageMessage = imageMessage
-			} else if (card.video) {
-				const { videoMessage } = await prepareWAMessageMedia({ video: card.video }, mediaOptions)
-				header.videoMessage = videoMessage
+			const header: any = {
+				title: card.title || '',
+				hasMediaAttachment: hasMedia
 			}
-		}
 
-		return {
-			header,
-			body: { text: card.body || '' },
-			footer: card.footer ? { text: card.footer } : undefined,
-			nativeFlowMessage: {
-				buttons: card.buttons.map(formatNativeFlowButton)
+			// Process media if present
+			if (hasMedia && mediaOptions) {
+				if (card.image) {
+					const { imageMessage } = await prepareWAMessageMedia({ image: card.image }, mediaOptions)
+					header.imageMessage = imageMessage
+				} else if (card.video) {
+					const { videoMessage } = await prepareWAMessageMedia({ video: card.video }, mediaOptions)
+					header.videoMessage = videoMessage
+				}
 			}
-		}
-	}))
+
+			return {
+				header,
+				body: { text: card.body || '' },
+				footer: card.footer ? { text: card.footer } : undefined,
+				nativeFlowMessage: {
+					buttons: card.buttons.map(formatNativeFlowButton)
+				}
+			}
+		})
+	)
 
 	// Build the interactive message with carousel
 	// Match Pastorini's EXACT working structure:
@@ -744,7 +749,7 @@ const LIST_LIMITS = {
 	MAX_ROW_TITLE: 24,
 	MAX_ROW_DESCRIPTION: 72,
 	MAX_ROW_ID: 200,
-	MAX_BUTTON_TEXT: 20,
+	MAX_BUTTON_TEXT: 20
 } as const
 
 /**
@@ -760,17 +765,13 @@ const validateListSections = (
 	}
 
 	if (sections.length > LIST_LIMITS.MAX_SECTIONS) {
-		throw new Boom(
-			`Maximum ${LIST_LIMITS.MAX_SECTIONS} sections allowed, got ${sections.length}`,
-			{ statusCode: 400 }
-		)
+		throw new Boom(`Maximum ${LIST_LIMITS.MAX_SECTIONS} sections allowed, got ${sections.length}`, { statusCode: 400 })
 	}
 
 	if (buttonText && buttonText.length > LIST_LIMITS.MAX_BUTTON_TEXT) {
-		throw new Boom(
-			`buttonText max ${LIST_LIMITS.MAX_BUTTON_TEXT} characters, got ${buttonText.length}`,
-			{ statusCode: 400 }
-		)
+		throw new Boom(`buttonText max ${LIST_LIMITS.MAX_BUTTON_TEXT} characters, got ${buttonText.length}`, {
+			statusCode: 400
+		})
 	}
 
 	let totalRows = 0
@@ -796,10 +797,7 @@ const validateListSections = (
 		for (const row of section.rows) {
 			const rowId = row.id || row.rowId || ''
 			if (rowId.length > LIST_LIMITS.MAX_ROW_ID) {
-				throw new Boom(
-					`Row ID max ${LIST_LIMITS.MAX_ROW_ID} characters, got ${rowId.length}`,
-					{ statusCode: 400 }
-				)
+				throw new Boom(`Row ID max ${LIST_LIMITS.MAX_ROW_ID} characters, got ${rowId.length}`, { statusCode: 400 })
 			}
 
 			if (row.title && row.title.length > LIST_LIMITS.MAX_ROW_TITLE) {
@@ -821,10 +819,7 @@ const validateListSections = (
 	}
 
 	if (totalRows > LIST_LIMITS.MAX_TOTAL_ROWS) {
-		throw new Boom(
-			`Maximum ${LIST_LIMITS.MAX_TOTAL_ROWS} total rows allowed, got ${totalRows}`,
-			{ statusCode: 400 }
-		)
+		throw new Boom(`Maximum ${LIST_LIMITS.MAX_TOTAL_ROWS} total rows allowed, got ${totalRows}`, { statusCode: 400 })
 	}
 }
 
@@ -845,13 +840,15 @@ export const generateListMessage = (options: ListMessageOptions): WAMessageConte
 
 	// Create native flow message with single_select button
 	const nativeFlowMessage = {
-		buttons: [{
-			name: 'single_select',
-			buttonParamsJson: JSON.stringify({
-				title: buttonText,
-				sections: formattedSections
-			})
-		}],
+		buttons: [
+			{
+				name: 'single_select',
+				buttonParamsJson: JSON.stringify({
+					title: buttonText,
+					sections: formattedSections
+				})
+			}
+		],
 		messageParamsJson: JSON.stringify({}),
 		messageVersion: 2
 	}
@@ -860,11 +857,13 @@ export const generateListMessage = (options: ListMessageOptions): WAMessageConte
 	const interactiveMessage: proto.Message.IInteractiveMessage = {
 		body: { text: text || '' },
 		footer: footer ? { text: footer } : undefined,
-		header: title ? {
-			title,
-			subtitle: '',
-			hasMediaAttachment: false
-		} : undefined,
+		header: title
+			? {
+					title,
+					subtitle: '',
+					hasMediaAttachment: false
+				}
+			: undefined,
 		nativeFlowMessage
 	}
 
@@ -919,15 +918,7 @@ export const generateListMessage = (options: ListMessageOptions): WAMessageConte
  * ```
  */
 export const generateProductListMessage = (options: ProductListMessageOptions): WAMessageContent => {
-	const {
-		title,
-		description,
-		buttonText,
-		footerText,
-		businessOwnerJid,
-		productSections,
-		headerImage
-	} = options
+	const { title, description, buttonText, footerText, businessOwnerJid, productSections, headerImage } = options
 
 	// Validation
 	if (!title || title.trim().length === 0) {
@@ -965,7 +956,9 @@ export const generateProductListMessage = (options: ProductListMessageOptions): 
 		// Validate each product has a valid productId
 		for (const product of section.products) {
 			if (!product || typeof product.productId !== 'string' || product.productId.trim().length === 0) {
-				throw new Boom(`Each product in section "${section.title}" must have a non-empty productId`, { statusCode: 400 })
+				throw new Boom(`Each product in section "${section.title}" must have a non-empty productId`, {
+					statusCode: 400
+				})
 			}
 		}
 	}
@@ -992,9 +985,14 @@ export const generateProductListMessage = (options: ProductListMessageOptions): 
 
 	// Add header image if provided (with validation)
 	if (headerImage) {
-		if (!headerImage.productId || typeof headerImage.productId !== 'string' || headerImage.productId.trim().length === 0) {
+		if (
+			!headerImage.productId ||
+			typeof headerImage.productId !== 'string' ||
+			headerImage.productId.trim().length === 0
+		) {
 			throw new Boom('headerImage.productId must be a non-empty string', { statusCode: 400 })
 		}
+
 		productListInfo.headerImage = {
 			productId: headerImage.productId,
 			jpegThumbnail: headerImage.jpegThumbnail
@@ -1037,9 +1035,7 @@ export const generateProductListMessage = (options: ProductListMessageOptions): 
  * await sock.sendMessage(jid, msg)
  * ```
  */
-export const generateProductCarouselMessage = (
-	options: ProductCarouselMessageOptions
-): WAMessageContent => {
+export const generateProductCarouselMessage = (options: ProductCarouselMessageOptions): WAMessageContent => {
 	const { businessOwnerJid, products, body } = options
 
 	if (!businessOwnerJid || typeof businessOwnerJid !== 'string' || businessOwnerJid.trim().length === 0) {
@@ -1069,7 +1065,7 @@ export const generateProductCarouselMessage = (
 
 	// Build cards array - each card is an IInteractiveMessage with collectionMessage
 	// collectionMessage references a product from the business catalog
-	const cards: proto.Message.IInteractiveMessage[] = products.map((product) => ({
+	const cards: proto.Message.IInteractiveMessage[] = products.map(product => ({
 		collectionMessage: {
 			bizJid: normalizedBizJid,
 			id: product.productId,
@@ -1211,7 +1207,7 @@ export const generateWAMessageContent = async (
 		m.messageContextInfo = generated.messageContextInfo
 		options.logger?.info('Sending carousel as direct interactiveMessage (Pastorini approach, no viewOnce wrapper)')
 		// Return plain JS object - no fromObject() to avoid corrupting nested carousel structures
-		return m as WAMessageContent
+		return m
 	}
 	// Check for nativeList
 	else if (hasNonNullishProperty(message, 'nativeList')) {
@@ -1285,6 +1281,7 @@ export const generateWAMessageContent = async (
 			} else if (btn.callButton) {
 				return { index: btn.index, callButton: btn.callButton }
 			}
+
 			return btn
 		})
 
@@ -1300,10 +1297,7 @@ export const generateWAMessageContent = async (
 		options.logger?.warn('[EXPERIMENTAL] Sending templateMessage - this may not work and can cause bans')
 	} else if (hasNonNullishProperty(message, 'sections')) {
 		// Process list messages - validate limits
-		validateListSections(
-			(message as any).sections,
-			(message as any).buttonText
-		)
+		validateListSections((message as any).sections, (message as any).buttonText)
 		const listMessage: proto.Message.IListMessage = {
 			title: (message as any).title,
 			description: (message as any).text,
@@ -1523,21 +1517,22 @@ export const generateWAMessageContent = async (
 				: proto.Message.ButtonsMessage.HeaderType.VIDEO
 
 		// Extract only media properties to avoid type errors
-		const mediaContent: AnyMediaMessageContent = mediaType === 'image'
-			? {
-				image: (message as any).image,
-				caption: (message as any).caption,
-				jpegThumbnail: (message as any).jpegThumbnail,
-				mimetype: (message as any).mimetype
-			  }
-			: {
-				video: (message as any).video,
-				caption: (message as any).caption,
-				jpegThumbnail: (message as any).jpegThumbnail,
-				gifPlayback: (message as any).gifPlayback,
-				ptv: (message as any).ptv,
-				mimetype: (message as any).mimetype
-			  }
+		const mediaContent: AnyMediaMessageContent =
+			mediaType === 'image'
+				? {
+						image: (message as any).image,
+						caption: (message as any).caption,
+						jpegThumbnail: (message as any).jpegThumbnail,
+						mimetype: (message as any).mimetype
+					}
+				: {
+						video: (message as any).video,
+						caption: (message as any).caption,
+						jpegThumbnail: (message as any).jpegThumbnail,
+						gifPlayback: (message as any).gifPlayback,
+						ptv: (message as any).ptv,
+						mimetype: (message as any).mimetype
+					}
 
 		// Prepare media
 		const mediaMessage = await prepareWAMessageMedia(mediaContent, options)
@@ -1769,7 +1764,11 @@ export const generateWAMessageFromContent = (
 
 		const innerContent = innerMessage[key as Exclude<keyof proto.IMessage, 'conversation'>]
 		const contextInfo: proto.IContextInfo =
-			(innerContent && typeof innerContent === 'object' && 'contextInfo' in innerContent && (innerContent as Record<string, unknown>).contextInfo as proto.IContextInfo) || {}
+			(innerContent &&
+				typeof innerContent === 'object' &&
+				'contextInfo' in innerContent &&
+				((innerContent as Record<string, unknown>).contextInfo as proto.IContextInfo)) ||
+			{}
 		contextInfo.participant = jidNormalizedUser(participant!)
 		contextInfo.stanzaId = quoted.key.id
 		contextInfo.quotedMessage = quotedMsg

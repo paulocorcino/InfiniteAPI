@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals'
 import P from 'pino'
-import { makeSessionActivityTracker } from '../../Signal/session-activity-tracker'
 import type { SessionActivityMetadata } from '../../Signal/session-activity-tracker'
+import { makeSessionActivityTracker } from '../../Signal/session-activity-tracker'
 import type { SignalKeyStoreWithTransaction } from '../../Types'
 
 const mockKeys: jest.Mocked<SignalKeyStoreWithTransaction> = {
@@ -137,7 +137,7 @@ describe('SessionActivityTracker', () => {
 			const tracker = makeSessionActivityTracker(mockKeys, logger, config)
 
 			// @ts-ignore
-		mockKeys.get.mockRejectedValue(new Error('Disk read error'))
+			mockKeys.get.mockRejectedValue(new Error('Disk read error'))
 
 			const lastActivity = await tracker.getLastActivity('5511999999999@s.whatsapp.net')
 			expect(lastActivity).toBeUndefined()
@@ -495,10 +495,10 @@ describe('SessionActivityTracker', () => {
 			const tracker = makeSessionActivityTracker(mockKeys, logger, config)
 
 			const specialJids = [
-				'5511999999999:1@s.whatsapp.net',  // Device ID
-				'123456789@lid',                    // LID
-				'5511999999999:99@hosted',          // Hosted device
-				'123456789:5@hosted.lid'            // Hosted LID
+				'5511999999999:1@s.whatsapp.net', // Device ID
+				'123456789@lid', // LID
+				'5511999999999:99@hosted', // Hosted device
+				'123456789:5@hosted.lid' // Hosted LID
 			]
 
 			specialJids.forEach(jid => tracker.recordActivity(jid))

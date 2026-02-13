@@ -1,13 +1,13 @@
+import { Boom } from '@hapi/boom'
 import { createHash } from 'crypto'
 import { zipSync } from 'fflate'
 import { promises as fs } from 'fs'
-import { Boom } from '@hapi/boom'
 import { proto } from '../../WAProto/index.js'
 import type { MediaType } from '../Defaults/index.js'
 import type { Sticker, StickerPack, WAMediaUpload, WAMediaUploadFunction } from '../Types/Message.js'
-import type { ILogger } from './logger.js'
 import { generateMessageIDV2 } from './generics.js'
-import { getImageProcessingLibrary, encryptedStream } from './messages-media.js'
+import type { ILogger } from './logger.js'
+import { encryptedStream, getImageProcessingLibrary } from './messages-media.js'
 
 /**
  * Verifica se um buffer é um arquivo WebP válido
@@ -86,7 +86,7 @@ export const isAnimatedWebP = (buffer: Buffer): boolean => {
 		if (chunkFourCC === 'VP8X' && offset + 8 < buffer.length) {
 			const flags = buffer[offset + 8]
 			// Bit 1 (0x02) = animation flag
-			if (flags && (flags & 0x02)) return true
+			if (flags && flags & 0x02) return true
 		}
 
 		// Animation chunks
@@ -156,7 +156,7 @@ const generateSha256Hash = (buffer: Buffer): string => {
 		.digest('base64')
 		.replace(/\+/g, '-') // + becomes -
 		.replace(/\//g, '_') // / becomes _ (CRITICAL: different from + mapping!)
-		.replace(/=/g, '')   // Remove padding
+		.replace(/=/g, '') // Remove padding
 }
 
 /**
@@ -190,6 +190,7 @@ const mediaToBuffer = async (
 				statusCode: 413
 			})
 		}
+
 		return media
 	} else if (typeof media === 'object' && 'url' in media) {
 		const url = media.url.toString()
@@ -201,6 +202,7 @@ const mediaToBuffer = async (
 				if (!base64Data) {
 					throw new Boom(`Invalid data URL for ${context}: missing base64 data`, { statusCode: 400 })
 				}
+
 				const buffer = Buffer.from(base64Data, 'base64')
 
 				// SECURITY: Validate buffer size
@@ -485,7 +487,11 @@ export const prepareStickerPackMessage = async (
 							if (compressed70.length <= MAX_STICKER_SIZE) {
 								webpBuffer = compressed70
 								logger?.info(
-									{ index: i, originalKB: (webpBuffer.length / 1024).toFixed(2), compressedKB: (compressed70.length / 1024).toFixed(2) },
+									{
+										index: i,
+										originalKB: (webpBuffer.length / 1024).toFixed(2),
+										compressedKB: (compressed70.length / 1024).toFixed(2)
+									},
 									`Sticker ${i + 1} compressed successfully (quality 70)`
 								)
 							} else {
@@ -495,7 +501,11 @@ export const prepareStickerPackMessage = async (
 								if (compressed50.length <= MAX_STICKER_SIZE) {
 									webpBuffer = compressed50
 									logger?.info(
-										{ index: i, originalKB: (webpBuffer.length / 1024).toFixed(2), compressedKB: (compressed50.length / 1024).toFixed(2) },
+										{
+											index: i,
+											originalKB: (webpBuffer.length / 1024).toFixed(2),
+											compressedKB: (compressed50.length / 1024).toFixed(2)
+										},
 										`Sticker ${i + 1} compressed successfully (quality 50)`
 									)
 								} else {
@@ -587,10 +597,7 @@ export const prepareStickerPackMessage = async (
 				}
 			}
 
-			logger?.debug(
-				{ fileName, mergedEmojis, duplicateCount },
-				'Duplicate sticker detected - merged metadata'
-			)
+			logger?.debug({ fileName, mergedEmojis, duplicateCount }, 'Duplicate sticker detected - merged metadata')
 		} else {
 			// New sticker - add to ZIP and create metadata
 			stickerData[fileName] = [new Uint8Array(webpBuffer), { level: 0 as 0 }]
@@ -691,10 +698,9 @@ export const prepareStickerPackMessage = async (
 		const lib = await getImageProcessingLibrary()
 
 		if (!lib?.sharp) {
-			throw new Boom(
-				'Sharp library is required for thumbnail generation. Install with: yarn add sharp',
-				{ statusCode: 400 }
-			)
+			throw new Boom('Sharp library is required for thumbnail generation. Install with: yarn add sharp', {
+				statusCode: 400
+			})
 		}
 
 		thumbnailBuffer = await lib.sharp

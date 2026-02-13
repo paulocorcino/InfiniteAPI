@@ -11,11 +11,11 @@ import type {
 	WAMessageKey
 } from '../Types'
 import { WAMessageStatus } from '../Types'
+import { logEventBuffer } from './baileys-logger'
 import { trimUndefined } from './generics'
 import type { ILogger } from './logger'
 import { updateMessageWithReaction, updateMessageWithReceipt } from './messages'
 import { isRealMessage, shouldIncrementChatUnread } from './process-message'
-import { logEventBuffer } from './baileys-logger'
 
 // ============================================================================
 // BUFFER CONFIGURATION - Environment Variable Support
@@ -329,6 +329,7 @@ class AdaptiveTimeoutCalculator {
 		} else if (this.currentTimeout >= this.maxTimeout * 0.8) {
 			return 'conservative'
 		}
+
 		return 'balanced'
 	}
 
@@ -339,6 +340,7 @@ class AdaptiveTimeoutCalculator {
 		if (this.eventTimestamps.length < 2) {
 			return 0
 		}
+
 		const oldest = this.eventTimestamps[0]
 		const newest = this.eventTimestamps[this.eventTimestamps.length - 1]
 		if (oldest === undefined || newest === undefined) return 0
@@ -428,18 +430,20 @@ export const makeEventBuffer = (
 	const MAX_METRICS_QUEUE_SIZE = 1000 // Cap to prevent unbounded growth
 
 	if (config.enableMetrics) {
-		import('./prometheus-metrics').then(m => {
-			metricsModule = m
-			logger.debug({ queuedCount: metricsQueue.length }, '📊 Prometheus metrics loaded, flushing buffered metrics')
-			// Flush buffered metrics
-			metricsQueue.forEach(fn => fn())
-			metricsQueue = []
-		}).catch(() => {
-			logger.debug('Prometheus metrics not available for event buffer')
-			metricsImportFailed = true
-			// Clear queue to prevent memory leak
-			metricsQueue = []
-		})
+		import('./prometheus-metrics')
+			.then(m => {
+				metricsModule = m
+				logger.debug({ queuedCount: metricsQueue.length }, '📊 Prometheus metrics loaded, flushing buffered metrics')
+				// Flush buffered metrics
+				metricsQueue.forEach(fn => fn())
+				metricsQueue = []
+			})
+			.catch(() => {
+				logger.debug('Prometheus metrics not available for event buffer')
+				metricsImportFailed = true
+				// Clear queue to prevent memory leak
+				metricsQueue = []
+			})
 	}
 
 	// Helper to record metrics with buffer support
@@ -467,6 +471,7 @@ export const makeEventBuffer = (
 			clearTimeout(bufferTimeout)
 			bufferTimeout = null
 		}
+
 		if (flushPendingTimeout) {
 			clearTimeout(flushPendingTimeout)
 			flushPendingTimeout = null
@@ -486,10 +491,13 @@ export const makeEventBuffer = (
 	function checkBufferOverflow(): boolean {
 		if (currentEventCount >= config.maxBufferSize) {
 			stats.overflowsDetected++
-			logger.warn({
-				currentSize: currentEventCount,
-				maxSize: config.maxBufferSize
-			}, 'Buffer overflow detected, forcing flush')
+			logger.warn(
+				{
+					currentSize: currentEventCount,
+					maxSize: config.maxBufferSize
+				},
+				'Buffer overflow detected, forcing flush'
+			)
 			logEventBuffer('buffer_overflow', {
 				currentSize: currentEventCount,
 				maxSize: config.maxBufferSize
@@ -500,6 +508,7 @@ export const makeEventBuffer = (
 			} else if (!metricsImportFailed && metricsQueue.length < MAX_METRICS_QUEUE_SIZE) {
 				metricsQueue.push(() => metricsModule?.recordBufferOverflow())
 			}
+
 			flush(true)
 			return true
 		}
@@ -507,11 +516,14 @@ export const makeEventBuffer = (
 		// Warn if approaching threshold
 		const threshold = config.maxBufferSize * config.bufferWarnThreshold
 		if (currentEventCount >= threshold && currentEventCount < config.maxBufferSize) {
-			logger.debug({
-				currentSize: currentEventCount,
-				threshold,
-				maxSize: config.maxBufferSize
-			}, 'Buffer approaching overflow threshold')
+			logger.debug(
+				{
+					currentSize: currentEventCount,
+					threshold,
+					maxSize: config.maxBufferSize
+				},
+				'Buffer approaching overflow threshold'
+			)
 		}
 
 		return false
@@ -524,11 +536,14 @@ export const makeEventBuffer = (
 		if (historyCache.size > config.maxHistoryCacheSize) {
 			const removed = historyCache.cleanup(config.lruCleanupRatio)
 			stats.lruCleanups++
-			logger.debug({
-				removed: removed.length,
-				remaining: historyCache.size,
-				maxSize: config.maxHistoryCacheSize
-			}, 'LRU cleanup performed on history cache')
+			logger.debug(
+				{
+					removed: removed.length,
+					remaining: historyCache.size,
+					maxSize: config.maxHistoryCacheSize
+				},
+				'LRU cleanup performed on history cache'
+			)
 			logEventBuffer('cache_cleanup', {
 				removed: removed.length,
 				remaining: historyCache.size
@@ -558,9 +573,7 @@ export const makeEventBuffer = (
 			clearAllTimers()
 
 			// Use adaptive timeout if enabled
-			const timeout = config.enableAdaptiveTimeout
-				? adaptiveTimeout.getTimeout()
-				: config.bufferTimeoutMs
+			const timeout = config.enableAdaptiveTimeout ? adaptiveTimeout.getTimeout() : config.bufferTimeoutMs
 			stats.currentTimeout = timeout
 
 			bufferTimeout = setTimeout(() => {
@@ -577,7 +590,7 @@ export const makeEventBuffer = (
 		bufferCount++
 	}
 
-	function flush(force: boolean = false): boolean {
+	function flush(force = false): boolean {
 		if (destroyed) {
 			logger.warn('Attempted to flush destroyed event buffer')
 			return false
@@ -598,9 +611,10 @@ export const makeEventBuffer = (
 		stats.lastFlushAt = Date.now()
 
 		// Update average events per flush
-		stats.avgEventsPerFlush = stats.totalFlushes > 0
-			? (stats.avgEventsPerFlush * (stats.totalFlushes - 1) + eventCount) / stats.totalFlushes
-			: eventCount
+		stats.avgEventsPerFlush =
+			stats.totalFlushes > 0
+				? (stats.avgEventsPerFlush * (stats.totalFlushes - 1) + eventCount) / stats.totalFlushes
+				: eventCount
 
 		// Clear timeouts
 		clearAllTimers()
@@ -617,7 +631,9 @@ export const makeEventBuffer = (
 			if (metricsModule) {
 				metricsModule.updateAdaptiveMetrics(adaptiveTimeout.getEventRate(), adaptiveTimeout.isHealthy())
 			} else if (!metricsImportFailed && metricsQueue.length < MAX_METRICS_QUEUE_SIZE) {
-				metricsQueue.push(() => metricsModule?.updateAdaptiveMetrics(adaptiveTimeout.getEventRate(), adaptiveTimeout.isHealthy()))
+				metricsQueue.push(() =>
+					metricsModule?.updateAdaptiveMetrics(adaptiveTimeout.getEventRate(), adaptiveTimeout.isHealthy())
+				)
 			}
 		}
 
@@ -790,9 +806,7 @@ export const makeEventBuffer = (
 				...stats,
 				currentBufferSize: currentEventCount,
 				historyCacheSize: historyCache.size,
-				currentTimeout: config.enableAdaptiveTimeout
-					? adaptiveTimeout.getTimeout()
-					: config.bufferTimeoutMs
+				currentTimeout: config.enableAdaptiveTimeout ? adaptiveTimeout.getTimeout() : config.bufferTimeoutMs
 			}
 		},
 		getConfig() {
@@ -817,6 +831,7 @@ export const makeEventBuffer = (
 						if (functionTimeout) {
 							clearTimeout(functionTimeout)
 						}
+
 						functionTimeout = setTimeout(() => {
 							functionTimeout = null
 							if (isBuffering && bufferCount === 1 && !destroyed) {
@@ -832,6 +847,7 @@ export const makeEventBuffer = (
 						clearTimeout(functionTimeout)
 						functionTimeout = null
 					}
+
 					throw error
 				} finally {
 					bufferCount = Math.max(0, bufferCount - 1)
@@ -853,6 +869,7 @@ export const makeEventBuffer = (
 			if (destroyed) {
 				throw new Error('Cannot add listener to destroyed event buffer')
 			}
+
 			return ev.on(...args)
 		},
 		off: (...args) => ev.off(...args),
@@ -987,6 +1004,7 @@ function append<E extends BufferableEvent>(
 					logger.debug({ update }, 'chats.update: update missing id, skipping')
 					continue
 				}
+
 				const conditionMatches = update.conditional ? update.conditional(data) : true
 				if (conditionMatches) {
 					delete update.conditional
@@ -1068,6 +1086,7 @@ function append<E extends BufferableEvent>(
 					logger.debug({ update }, 'contacts.update: update missing id, skipping')
 					continue
 				}
+
 				// merge into prior upsert
 				const upsert = data.historySets.contacts[id] || data.contactUpserts[id]
 				if (upsert) {
@@ -1193,6 +1212,7 @@ function append<E extends BufferableEvent>(
 					logger.debug({ update }, 'groups.update: update missing id, skipping')
 					continue
 				}
+
 				const groupUpdate = data.groupUpdates[id] || {}
 				if (!data.groupUpdates[id]) {
 					data.groupUpdates[id] = Object.assign(groupUpdate, update)
@@ -1239,6 +1259,7 @@ function append<E extends BufferableEvent>(
 			logger.debug({ messageKey: message.key }, 'decrementChatReadCounter: remoteJid missing, skipping')
 			return
 		}
+
 		const chat = data.chatUpdates[chatId] || data.chatUpserts[chatId]
 		if (
 			isRealMessage(message) &&

@@ -1,4 +1,4 @@
-import { Browsers, getPlatformId, isValidBrowserPreset, detectedOSVersions } from '../../Utils/browser-utils'
+import { Browsers, detectedOSVersions, getPlatformId, isValidBrowserPreset } from '../../Utils/browser-utils'
 
 describe('browser-utils', () => {
 	describe('Browsers', () => {

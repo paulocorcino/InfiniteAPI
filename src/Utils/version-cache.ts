@@ -1,7 +1,7 @@
 import { promises as fs } from 'fs'
 import { join } from 'path'
-import { fetchLatestWaWebVersion } from './generics'
 import type { WAVersion } from '../Types'
+import { fetchLatestWaWebVersion } from './generics'
 
 /**
  * Version cache entry stored in file
@@ -86,11 +86,7 @@ async function readCacheFile(filePath: string): Promise<VersionCacheEntry | null
 /**
  * Writes the cache to file
  */
-async function writeCacheFile(
-	filePath: string,
-	entry: VersionCacheEntry,
-	logger?: VersionCacheLogger
-): Promise<void> {
+async function writeCacheFile(filePath: string, entry: VersionCacheEntry, logger?: VersionCacheLogger): Promise<void> {
 	try {
 		await fs.writeFile(filePath, JSON.stringify(entry, null, 2), 'utf-8')
 	} catch (error) {
@@ -111,10 +107,7 @@ function isCacheValid(entry: VersionCacheEntry | null, ttlMs: number): boolean {
 /**
  * Fetches version with deduplication (prevents 150 parallel requests)
  */
-async function fetchVersionOnce(
-	cacheFilePath: string,
-	logger?: VersionCacheLogger
-): Promise<VersionCacheEntry> {
+async function fetchVersionOnce(cacheFilePath: string, logger?: VersionCacheLogger): Promise<VersionCacheEntry> {
 	logger?.info({}, 'Fetching WhatsApp Web version (shared for all connections)...')
 
 	const result = await fetchLatestWaWebVersion()
@@ -131,10 +124,7 @@ async function fetchVersionOnce(
 	// Persist to file (async, don't wait)
 	writeCacheFile(cacheFilePath, entry, logger).catch(() => {})
 
-	logger?.info(
-		{ version: entry.version, source: entry.source },
-		'Version fetched and cached'
-	)
+	logger?.info({ version: entry.version, source: entry.source }, 'Version fetched and cached')
 
 	return entry
 }
@@ -158,11 +148,7 @@ async function fetchVersionOnce(
 export async function getCachedVersion(
 	config: VersionCacheConfig = {}
 ): Promise<{ version: WAVersion; fromCache: boolean; age: number; source: 'online' | 'fallback' | 'memory' | 'file' }> {
-	const {
-		cacheTtlMs = DEFAULT_CACHE_TTL_MS,
-		cacheFilePath = DEFAULT_CACHE_FILE,
-		logger
-	} = config
+	const { cacheTtlMs = DEFAULT_CACHE_TTL_MS, cacheFilePath = DEFAULT_CACHE_FILE, logger } = config
 
 	// 1. Check memory cache first (fastest)
 	if (isCacheValid(memoryCache, cacheTtlMs) && memoryCache) {
@@ -183,8 +169,9 @@ export async function getCachedVersion(
 	// 3. Need to fetch - but deduplicate concurrent requests
 	// If 150 connections start at once, only 1 fetch happens
 	if (!fetchInProgress) {
-		fetchInProgress = fetchVersionOnce(cacheFilePath, logger)
-			.finally(() => { fetchInProgress = null })
+		fetchInProgress = fetchVersionOnce(cacheFilePath, logger).finally(() => {
+			fetchInProgress = null
+		})
 	}
 
 	const entry = await fetchInProgress
@@ -195,9 +182,7 @@ export async function getCachedVersion(
  * Clears the version cache (memory and file).
  * Also cancels any in-progress fetch to prevent it from restoring the cache.
  */
-export async function clearVersionCache(
-	cacheFilePath: string = DEFAULT_CACHE_FILE
-): Promise<void> {
+export async function clearVersionCache(cacheFilePath: string = DEFAULT_CACHE_FILE): Promise<void> {
 	// Wait for any in-progress fetch to complete before clearing
 	// This prevents the fetch from restoring the cache after we clear it
 	if (fetchInProgress) {
@@ -224,9 +209,7 @@ export async function clearVersionCache(
  *
  * @returns Object with version, success status, and source
  */
-export async function refreshVersionCache(
-	config: VersionCacheConfig = {}
-): Promise<RefreshVersionResult> {
+export async function refreshVersionCache(config: VersionCacheConfig = {}): Promise<RefreshVersionResult> {
 	const { cacheFilePath = DEFAULT_CACHE_FILE, logger } = config
 
 	// Wait for any existing fetch to complete first (deduplication)
@@ -260,9 +243,7 @@ export async function refreshVersionCache(
 /**
  * Gets cache status information
  */
-export function getVersionCacheStatus(
-	cacheTtlMs: number = DEFAULT_CACHE_TTL_MS
-): {
+export function getVersionCacheStatus(cacheTtlMs: number = DEFAULT_CACHE_TTL_MS): {
 	hasCache: boolean
 	version: WAVersion | null
 	age: number | null

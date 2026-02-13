@@ -3,10 +3,6 @@ import { inflate } from 'zlib'
 import { proto } from '../../WAProto/index.js'
 import type { Chat, Contact, LIDMapping, WAMessage } from '../Types'
 import { WAMessageStubType } from '../Types'
-import { toNumber } from './generics'
-import { normalizeMessageContent } from './messages'
-import { downloadContentFromMessage } from './messages-media'
-import type { ILogger } from './logger.js'
 import {
 	isAnyLidUser,
 	isAnyPnUser,
@@ -16,6 +12,10 @@ import {
 	jidDecode,
 	jidNormalizedUser
 } from '../WABinary/index.js'
+import { toNumber } from './generics'
+import type { ILogger } from './logger.js'
+import { normalizeMessageContent } from './messages'
+import { downloadContentFromMessage } from './messages-media'
 
 const inflatePromise = promisify(inflate)
 
@@ -255,10 +255,7 @@ const extractPnFromMessages = (messages: proto.IHistorySyncMsg[]): string | unde
  * @see https://github.com/WhiskeySockets/Baileys/issues/2263
  */
 export const processHistoryMessage = (item: proto.IHistorySync, logger?: ILogger) => {
-	logger?.trace(
-		{ syncType: item.syncType, progress: item.progress },
-		'processing history sync'
-	)
+	logger?.trace({ syncType: item.syncType, progress: item.progress }, 'processing history sync')
 	const messages: WAMessage[] = []
 	const contacts: Contact[] = []
 	const chats: Chat[] = []
@@ -275,6 +272,7 @@ export const processHistoryMessage = (item: proto.IHistorySync, logger?: ILogger
 		if (!mapping.lid || !mapping.pn) {
 			return
 		}
+
 		lidPnMap.set(mapping.lid, mapping)
 	}
 
@@ -298,11 +296,7 @@ export const processHistoryMessage = (item: proto.IHistorySync, logger?: ILogger
 
 				// Source 2: Extract LID-PN mapping from conversation object
 				// This handles cases where the mapping isn't in phoneNumberToLidMappings
-				const conversationMapping = extractLidPnFromConversation(
-					chatId,
-					chat.lidJid,
-					chat.pnJid
-				)
+				const conversationMapping = extractLidPnFromConversation(chatId, chat.lidJid, chat.pnJid)
 				if (conversationMapping) {
 					addLidPnMapping(conversationMapping)
 				} else if (isAnyLidUser(chatId) && !chat.pnJid) {
@@ -370,7 +364,7 @@ export const processHistoryMessage = (item: proto.IHistorySync, logger?: ILogger
 
 			break
 		case proto.HistorySync.HistorySyncType.PUSH_NAME:
-			for (const c of (item.pushnames ?? [])) {
+			for (const c of item.pushnames ?? []) {
 				contacts.push({ id: c.id!, notify: c.pushname! })
 			}
 

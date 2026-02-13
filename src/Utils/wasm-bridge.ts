@@ -15,8 +15,7 @@ export { _bridgeReady as wasmBridgeReady }
 function getBridge(): WasmBridgeModule {
 	if (!_bridge) {
 		throw new Error(
-			'whatsapp-rust-bridge not yet loaded. ' +
-			'Ensure async operations have started before calling crypto functions.'
+			'whatsapp-rust-bridge not yet loaded. ' + 'Ensure async operations have started before calling crypto functions.'
 		)
 	}
 
@@ -27,7 +26,8 @@ export const hkdf: WasmBridgeModule['hkdf'] = (...args) => getBridge().hkdf(...a
 
 export const md5: WasmBridgeModule['md5'] = (...args) => getBridge().md5(...args)
 
-export const expandAppStateKeys: WasmBridgeModule['expandAppStateKeys'] = (...args) => getBridge().expandAppStateKeys(...args)
+export const expandAppStateKeys: WasmBridgeModule['expandAppStateKeys'] = (...args) =>
+	getBridge().expandAppStateKeys(...args)
 
 let _ltHash: InstanceType<WasmBridgeModule['LTHashAntiTampering']> | undefined
 

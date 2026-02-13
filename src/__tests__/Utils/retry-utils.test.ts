@@ -2,23 +2,23 @@
  * Testes unitários para retry-utils.ts
  */
 
-import { describe, it, expect, beforeEach, jest } from '@jest/globals'
+import { beforeEach, describe, expect, it, jest } from '@jest/globals'
 import {
-	retry,
-	retryWithResult,
-	createRetrier,
-	retryable,
-	RetryManager,
-	RetryExhaustedError,
-	RetryAbortedError,
 	calculateDelay,
-	retryPredicates,
-	retryConfigs,
-	getRetryDelayWithJitter,
+	createRetrier,
 	getAllRetryDelaysWithJitter,
+	getRetryDelayWithJitter,
+	retry,
 	RETRY_BACKOFF_DELAYS,
 	RETRY_JITTER_FACTOR,
+	retryable,
+	RetryAbortedError,
+	retryConfigs,
 	type RetryContext,
+	RetryExhaustedError,
+	RetryManager,
+	retryPredicates,
+	retryWithResult
 } from '../../Utils/retry-utils.js'
 
 describe('retry', () => {
@@ -29,10 +29,13 @@ describe('retry', () => {
 		})
 
 		it('should return result from async operation', async () => {
-			const result = await retry(async () => {
-				await new Promise((resolve) => setTimeout(resolve, 10))
-				return 'async success'
-			}, { collectMetrics: false })
+			const result = await retry(
+				async () => {
+					await new Promise(resolve => setTimeout(resolve, 10))
+					return 'async success'
+				},
+				{ collectMetrics: false }
+			)
 
 			expect(result).toBe('async success')
 		})
@@ -48,12 +51,13 @@ describe('retry', () => {
 					if (attempts < 3) {
 						throw new Error('Failing')
 					}
+
 					return 'success after retries'
 				},
 				{
 					maxAttempts: 5,
 					baseDelay: 10,
-					collectMetrics: false,
+					collectMetrics: false
 				}
 			)
 
@@ -70,7 +74,7 @@ describe('retry', () => {
 					{
 						maxAttempts: 3,
 						baseDelay: 10,
-						collectMetrics: false,
+						collectMetrics: false
 					}
 				)
 			).rejects.toThrow(RetryExhaustedError)
@@ -80,7 +84,7 @@ describe('retry', () => {
 			let receivedContext: RetryContext | null = null
 
 			await retry(
-				(context) => {
+				context => {
 					receivedContext = context
 					return 'success'
 				},
@@ -107,7 +111,7 @@ describe('retry', () => {
 						maxAttempts: 5,
 						baseDelay: 10,
 						shouldRetry: () => false,
-						collectMetrics: false,
+						collectMetrics: false
 					}
 				)
 			).rejects.toThrow(RetryExhaustedError)
@@ -127,13 +131,14 @@ describe('retry', () => {
 					if (attempts < 3) {
 						throw new Error('Failing')
 					}
+
 					return 'success'
 				},
 				{
 					maxAttempts: 5,
 					baseDelay: 10,
 					onRetry,
-					collectMetrics: false,
+					collectMetrics: false
 				}
 			)
 
@@ -145,7 +150,7 @@ describe('retry', () => {
 
 			await retry(() => 'result', {
 				onSuccess,
-				collectMetrics: false,
+				collectMetrics: false
 			})
 
 			expect(onSuccess).toHaveBeenCalledWith('result', 1)
@@ -163,7 +168,7 @@ describe('retry', () => {
 						maxAttempts: 2,
 						baseDelay: 10,
 						onFailure,
-						collectMetrics: false,
+						collectMetrics: false
 					}
 				)
 			).rejects.toThrow()
@@ -178,14 +183,14 @@ describe('retry', () => {
 
 			const promise = retry(
 				async () => {
-					await new Promise((resolve) => setTimeout(resolve, 100))
+					await new Promise(resolve => setTimeout(resolve, 100))
 					return 'success'
 				},
 				{
 					maxAttempts: 5,
 					baseDelay: 50,
 					abortSignal: controller.signal,
-					collectMetrics: false,
+					collectMetrics: false
 				}
 			)
 
@@ -214,7 +219,7 @@ describe('retryWithResult', () => {
 			{
 				maxAttempts: 2,
 				baseDelay: 10,
-				collectMetrics: false,
+				collectMetrics: false
 			}
 		)
 
@@ -287,7 +292,7 @@ describe('createRetrier', () => {
 		const myRetrier = createRetrier({
 			maxAttempts: 5,
 			baseDelay: 10,
-			collectMetrics: false,
+			collectMetrics: false
 		})
 
 		let attempts = 0
@@ -315,7 +320,7 @@ describe('retryable', () => {
 			{
 				maxAttempts: 5,
 				baseDelay: 10,
-				collectMetrics: false,
+				collectMetrics: false
 			}
 		)
 
@@ -340,7 +345,7 @@ describe('RetryManager', () => {
 
 	it('should cancel active retry', async () => {
 		const promise = manager.execute('cancelable', async () => {
-			await new Promise((resolve) => setTimeout(resolve, 1000))
+			await new Promise(resolve => setTimeout(resolve, 1000))
 			return 'result'
 		})
 
@@ -351,10 +356,12 @@ describe('RetryManager', () => {
 
 	it('should check if operation is active', async () => {
 		let resolve: () => void
-		const promise = manager.execute('active', () =>
-			new Promise<string>((r) => {
-				resolve = () => r('done')
-			})
+		const promise = manager.execute(
+			'active',
+			() =>
+				new Promise<string>(r => {
+					resolve = () => r('done')
+				})
 		)
 
 		expect(manager.isActive('active')).toBe(true)
@@ -368,7 +375,7 @@ describe('RetryManager', () => {
 	it('should cancel all operations', async () => {
 		const promises = [
 			manager.execute('op1', () => new Promise((_, reject) => setTimeout(() => reject(new Error()), 1000))),
-			manager.execute('op2', () => new Promise((_, reject) => setTimeout(() => reject(new Error()), 1000))),
+			manager.execute('op2', () => new Promise((_, reject) => setTimeout(() => reject(new Error()), 1000)))
 		]
 
 		setTimeout(() => manager.cancelAll(), 20)
@@ -425,8 +432,8 @@ describe('retryPredicates', () => {
 	describe('or', () => {
 		it('should combine predicates with OR', () => {
 			const combined = retryPredicates.or(
-				(e) => e.message.includes('A'),
-				(e) => e.message.includes('B')
+				e => e.message.includes('A'),
+				e => e.message.includes('B')
 			)
 
 			expect(combined(new Error('A'), 1)).toBe(true)
@@ -438,8 +445,8 @@ describe('retryPredicates', () => {
 	describe('and', () => {
 		it('should combine predicates with AND', () => {
 			const combined = retryPredicates.and(
-				(e) => e.message.includes('A'),
-				(e) => e.message.includes('B')
+				e => e.message.includes('A'),
+				e => e.message.includes('B')
 			)
 
 			expect(combined(new Error('A and B'), 1)).toBe(true)

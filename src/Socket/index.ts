@@ -1,7 +1,7 @@
 import { DEFAULT_CONNECTION_CONFIG } from '../Defaults'
 import type { UserFacingSocketConfig, WAVersion } from '../Types'
-import { getCachedVersion, refreshVersionCache, clearVersionCache, getVersionCacheStatus } from '../Utils/version-cache'
 import type { VersionCacheLogger } from '../Utils/version-cache'
+import { clearVersionCache, getCachedVersion, getVersionCacheStatus, refreshVersionCache } from '../Utils/version-cache'
 import { makeCommunitiesSocket } from './communities'
 
 /**
@@ -109,18 +109,13 @@ export const makeWASocketAutoVersion = async (config: UserFacingSocketConfig) =>
 				fromCache,
 				ageMinutes: fromCache ? Math.round(age / 60000) : 0
 			},
-			fromCache
-				? 'Using cached WhatsApp Web version'
-				: 'Fetched fresh WhatsApp Web version'
+			fromCache ? 'Using cached WhatsApp Web version' : 'Fetched fresh WhatsApp Web version'
 		)
 
 		mergedConfig.version = version
 		trackedVersion = [...version] as WAVersion
 	} catch (error) {
-		logger?.warn(
-			{ error, fallbackVersion: mergedConfig.version },
-			'Error fetching version, using bundled version'
-		)
+		logger?.warn({ error, fallbackVersion: mergedConfig.version }, 'Error fetching version, using bundled version')
 	}
 
 	// Create the socket
@@ -128,7 +123,7 @@ export const makeWASocketAutoVersion = async (config: UserFacingSocketConfig) =>
 
 	// Listen for connection close to cleanup interval (Fix #1, #6)
 	// This handles both explicit sock.end() and internal disconnections
-	sock.ev.on('connection.update', (update) => {
+	sock.ev.on('connection.update', update => {
 		if (update.connection === 'close') {
 			isSocketClosed = true
 			cleanupInterval()
@@ -139,10 +134,7 @@ export const makeWASocketAutoVersion = async (config: UserFacingSocketConfig) =>
 
 	// Setup periodic version check if interval > 0
 	if (checkIntervalMs > 0) {
-		logger?.info(
-			{ intervalHours: checkIntervalMs / (60 * 60 * 1000) },
-			'Starting periodic version check'
-		)
+		logger?.info({ intervalHours: checkIntervalMs / (60 * 60 * 1000) }, 'Starting periodic version check')
 
 		versionCheckInterval = setInterval(async () => {
 			// Skip if socket is closed (Fix #8 - race condition)
@@ -169,10 +161,7 @@ export const makeWASocketAutoVersion = async (config: UserFacingSocketConfig) =>
 
 					// Don't update to fallback version on transient network errors
 					if (!fetchSuccess) {
-						logger?.warn(
-							{ fallbackVersion: result.version },
-							'Failed to fetch latest version, keeping current version'
-						)
+						logger?.warn({ fallbackVersion: result.version }, 'Failed to fetch latest version, keeping current version')
 						return // Skip version update on fetch failure
 					}
 				} else if (cacheStatus.version) {

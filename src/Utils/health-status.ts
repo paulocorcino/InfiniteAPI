@@ -6,8 +6,8 @@
  * @module Utils/health-status
  */
 
-import { getVersionCacheStatus } from './version-cache.js'
 import { globalCircuitRegistry } from './circuit-breaker.js'
+import { getVersionCacheStatus } from './version-cache.js'
 
 /**
  * Circuit breaker health information

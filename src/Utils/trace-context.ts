@@ -12,8 +12,8 @@
  * @module Utils/trace-context
  */
 
-import { randomBytes } from 'crypto'
 import { AsyncLocalStorage } from 'async_hooks'
+import { randomBytes } from 'crypto'
 
 /**
  * Trace identifiers
@@ -169,12 +169,12 @@ export function createTraceContext(options: CreateContextOptions = {}): TraceCon
 			traceId,
 			spanId,
 			parentSpanId: options.parentSpanId,
-			correlationId,
+			correlationId
 		},
 		baggage: options.baggage || {},
 		spanStack: [],
 		createdAt: Date.now(),
-		metadata: options.metadata || {},
+		metadata: options.metadata || {}
 	}
 }
 
@@ -193,6 +193,7 @@ export function getOrCreateContext(): TraceContext {
 	if (existing) {
 		return existing
 	}
+
 	return createTraceContext()
 }
 
@@ -214,10 +215,7 @@ export function runWithNewContext<T>(options: CreateContextOptions, fn: () => T)
 /**
  * Execute async function with trace context
  */
-export async function runWithContextAsync<T>(
-	context: TraceContext,
-	fn: () => Promise<T>
-): Promise<T> {
+export async function runWithContextAsync<T>(context: TraceContext, fn: () => Promise<T>): Promise<T> {
 	return traceStorage.run(context, fn)
 }
 
@@ -234,13 +232,13 @@ export function createSpan(options: CreateSpanOptions): Span {
 			traceId: context?.traceIds.traceId || generateTraceId(),
 			spanId: generateSpanId(),
 			parentSpanId: options.asChild && parentSpan ? parentSpan.traceIds.spanId : undefined,
-			correlationId: context?.traceIds.correlationId || generateCorrelationId(),
+			correlationId: context?.traceIds.correlationId || generateCorrelationId()
 		},
 		startTime: Date.now(),
 		status: 'unset',
 		attributes: options.attributes || {},
 		events: [],
-		ended: false,
+		ended: false
 	}
 
 	return span
@@ -257,6 +255,7 @@ export function startSpan(options: CreateSpanOptions): Span {
 	if (context.currentSpan) {
 		context.spanStack.push(context.currentSpan)
 	}
+
 	context.currentSpan = span
 
 	return span
@@ -277,7 +276,7 @@ export function endSpan(span: Span, status?: SpanStatus): void {
 
 	// Pop span from stack in context
 	const context = getCurrentContext()
-	if (context && context.currentSpan === span) {
+	if (context?.currentSpan === span) {
 		context.currentSpan = context.spanStack.pop()
 	}
 }
@@ -293,7 +292,7 @@ export function addSpanEvent(span: Span, name: string, attributes?: Record<strin
 	span.events.push({
 		name,
 		timestamp: Date.now(),
-		attributes,
+		attributes
 	})
 }
 
@@ -326,7 +325,7 @@ export function setSpanError(span: Span, error: Error): void {
 
 	addSpanEvent(span, 'exception', {
 		'exception.type': error.name,
-		'exception.message': error.message,
+		'exception.message': error.message
 	})
 }
 
@@ -354,11 +353,11 @@ export function traced(name?: string) {
 
 				if (result instanceof Promise) {
 					return result
-						.then((value) => {
+						.then(value => {
 							endSpan(span, 'ok')
 							return value
 						})
-						.catch((error) => {
+						.catch(error => {
 							setSpanError(span, error as Error)
 							endSpan(span, 'error')
 							throw error
@@ -381,10 +380,7 @@ export function traced(name?: string) {
 /**
  * Wrapper for tracing a function
  */
-export function traceFunction<T extends (...args: unknown[]) => unknown>(
-	name: string,
-	fn: T
-): T {
+export function traceFunction<T extends(...args: unknown[]) => unknown>(name: string, fn: T): T {
 	return function (this: unknown, ...args: Parameters<T>): ReturnType<T> {
 		const span = startSpan({ name })
 
@@ -393,11 +389,11 @@ export function traceFunction<T extends (...args: unknown[]) => unknown>(
 
 			if (result instanceof Promise) {
 				return result
-					.then((value) => {
+					.then(value => {
 						endSpan(span, 'ok')
 						return value
 					})
-					.catch((error) => {
+					.catch(error => {
 						setSpanError(span, error as Error)
 						endSpan(span, 'error')
 						throw error
@@ -438,11 +434,7 @@ export async function withSpan<T>(
 /**
  * Execute sync operation with automatic span
  */
-export function withSpanSync<T>(
-	name: string,
-	operation: (span: Span) => T,
-	attributes?: Record<string, unknown>
-): T {
+export function withSpanSync<T>(name: string, operation: (span: Span) => T, attributes?: Record<string, unknown>): T {
 	const span = startSpan({ name, attributes })
 
 	try {
@@ -504,7 +496,7 @@ export const TRACE_HEADERS = {
 	SPAN_ID: 'x-span-id',
 	PARENT_SPAN_ID: 'x-parent-span-id',
 	CORRELATION_ID: 'x-correlation-id',
-	BAGGAGE: 'baggage',
+	BAGGAGE: 'baggage'
 } as const
 
 /**
@@ -578,7 +570,7 @@ export function exportContext(context: TraceContext): string {
 	return JSON.stringify({
 		traceIds: context.traceIds,
 		baggage: context.baggage,
-		metadata: context.metadata,
+		metadata: context.metadata
 	})
 }
 
@@ -593,7 +585,7 @@ export function importContext(serialized: string): CreateContextOptions {
 			parentSpanId: data.traceIds?.spanId,
 			correlationId: data.traceIds?.correlationId,
 			baggage: data.baggage,
-			metadata: data.metadata,
+			metadata: data.metadata
 		}
 	} catch {
 		return {}
@@ -638,8 +630,9 @@ export function createPrecisionTimer(): PrecisionTimer {
 				finalDuration = Number(process.hrtime.bigint() - start) / 1_000_000
 				stopped = true
 			}
+
 			return finalDuration
-		},
+		}
 	}
 }
 
@@ -656,5 +649,5 @@ export default {
 	withSpanSync,
 	injectTraceHeaders,
 	extractTraceHeaders,
-	createPrecisionTimer,
+	createPrecisionTimer
 }

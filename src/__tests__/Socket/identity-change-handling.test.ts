@@ -1,7 +1,11 @@
 import NodeCache from '@cacheable/node-cache'
 import { jest } from '@jest/globals'
 import P from 'pino'
-import { handleIdentityChange, type IdentityChangeContext, type IdentityChangeResult } from '../../Utils/identity-change-handler'
+import {
+	handleIdentityChange,
+	type IdentityChangeContext,
+	type IdentityChangeResult
+} from '../../Utils/identity-change-handler'
 import { type BinaryNode } from '../../WABinary'
 
 const logger = P({ level: 'silent' })
@@ -259,7 +263,10 @@ describe('Identity Change Handling', () => {
 			mockAssertSessions.mockResolvedValue(true)
 
 			const node = createIdentityChangeNode('user@s.whatsapp.net')
-			const result = await handleIdentityChange(node, createContext()) as Extract<IdentityChangeResult, { action: 'session_refreshed' }>
+			const result = (await handleIdentityChange(node, createContext())) as Extract<
+				IdentityChangeResult,
+				{ action: 'session_refreshed' }
+			>
 
 			expect(result.action).toBe('session_refreshed')
 			expect(result.hadExistingSession).toBe(true)
@@ -270,7 +277,10 @@ describe('Identity Change Handling', () => {
 			mockAssertSessions.mockResolvedValue(true)
 
 			const node = createIdentityChangeNode('user@s.whatsapp.net')
-			const result = await handleIdentityChange(node, createContext()) as Extract<IdentityChangeResult, { action: 'session_refreshed' }>
+			const result = (await handleIdentityChange(node, createContext())) as Extract<
+				IdentityChangeResult,
+				{ action: 'session_refreshed' }
+			>
 
 			expect(result.action).toBe('session_refreshed')
 			expect(result.hadExistingSession).toBe(false)
@@ -278,7 +288,10 @@ describe('Identity Change Handling', () => {
 
 		it('should include device number in skipped_companion_device result', async () => {
 			const node = createIdentityChangeNode('user:5@s.whatsapp.net')
-			const result = await handleIdentityChange(node, createContext()) as Extract<IdentityChangeResult, { action: 'skipped_companion_device' }>
+			const result = (await handleIdentityChange(node, createContext())) as Extract<
+				IdentityChangeResult,
+				{ action: 'skipped_companion_device' }
+			>
 
 			expect(result.action).toBe('skipped_companion_device')
 			expect(result.device).toBe(5)

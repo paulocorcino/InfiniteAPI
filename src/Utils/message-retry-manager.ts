@@ -46,7 +46,7 @@ export enum RetryReason {
 	/** ADV (Announcement Delivery Verification) failure */
 	AdvFailure = 12,
 	/** Status revoke was delayed */
-	StatusRevokeDelay = 13,
+	StatusRevokeDelay = 13
 }
 
 /**
@@ -56,7 +56,7 @@ export enum RetryReason {
  */
 export const MAC_ERROR_CODES = new Set<RetryReason>([
 	RetryReason.SignalErrorInvalidMessage,
-	RetryReason.SignalErrorBadMac,
+	RetryReason.SignalErrorBadMac
 ])
 
 /**
@@ -66,7 +66,7 @@ export const SESSION_ERROR_CODES = new Set<RetryReason>([
 	RetryReason.SignalErrorNoSession,
 	RetryReason.SignalErrorInvalidSession,
 	RetryReason.SignalErrorInvalidKey,
-	RetryReason.SignalErrorInvalidKeyId,
+	RetryReason.SignalErrorInvalidKeyId
 ])
 export interface RecentMessageKey {
 	to: string
@@ -196,10 +196,7 @@ export class MessageRetryManager {
 			const reasonName = RetryReason[errorCode] || `code_${errorCode}`
 			metrics.signalMacErrors?.inc({ action: 'session_recreation' })
 			metrics.signalSessionRecreations?.inc({ reason: 'mac_error' })
-			this.logger.warn(
-				{ jid, errorCode: reasonName },
-				'MAC error detected, forcing immediate session recreation'
-			)
+			this.logger.warn({ jid, errorCode: reasonName }, 'MAC error detected, forcing immediate session recreation')
 			return {
 				reason: `MAC error (${reasonName}) - contact may have reinstalled WhatsApp`,
 				recreate: true

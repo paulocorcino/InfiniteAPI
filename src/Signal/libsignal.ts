@@ -1,21 +1,15 @@
 /* @ts-ignore */
-import * as libsignal from 'libsignal'
 import { createHash } from 'crypto'
+import * as libsignal from 'libsignal'
 import { LRUCache } from 'lru-cache'
 import type { LIDMapping, SignalAuthState, SignalKeyStoreWithTransaction } from '../Types'
 import type { BaileysEventEmitter } from '../Types/Events'
 import type { SignalRepositoryWithLIDStore } from '../Types/Signal'
 import { generateSignalPubKey } from '../Utils'
+import { CircuitBreaker } from '../Utils/circuit-breaker.js'
 import type { ILogger } from '../Utils/logger'
 import { metrics } from '../Utils/prometheus-metrics.js'
-import { CircuitBreaker } from '../Utils/circuit-breaker.js'
-import {
-	isAnyLidUser,
-	isAnyPnUser,
-	jidDecode,
-	transferDevice,
-	WAJIDDomains
-} from '../WABinary'
+import { isAnyLidUser, isAnyPnUser, jidDecode, transferDevice, WAJIDDomains } from '../WABinary'
 import type { SenderKeyStore } from './Group/group_cipher'
 import { SenderKeyName } from './Group/sender-key-name'
 import { SenderKeyRecord } from './Group/sender-key-record'
@@ -184,7 +178,10 @@ function extractIdentityFromPkmsg(ciphertext: Uint8Array, logger?: ILogger): Uin
 				offset += length
 				// Bounds check after skipping field
 				if (offset > ciphertext.length) {
-					logger?.debug({ offset, length: ciphertext.length }, 'Offset exceeds ciphertext bounds after length-delimited field')
+					logger?.debug(
+						{ offset, length: ciphertext.length },
+						'Offset exceeds ciphertext bounds after length-delimited field'
+					)
 					break
 				}
 			} else if (wireType === 0) {
@@ -264,7 +261,7 @@ export function makeLibSignalRepository(
 		max: IDENTITY_KEY_CACHE_MAX,
 		ttl: IDENTITY_KEY_CACHE_TTL,
 		ttlAutopurge: true,
-		updateAgeOnGet: true,
+		updateAgeOnGet: true
 	})
 
 	// Update cache size metric periodically
@@ -345,7 +342,7 @@ export function makeLibSignalRepository(
 										jid,
 										addr: addrStr,
 										previousFingerprint: saveResult.previousFingerprint,
-										newFingerprint: saveResult.currentFingerprint,
+										newFingerprint: saveResult.currentFingerprint
 									},
 									'Identity key changed - contact may have reinstalled WhatsApp, session will be re-established'
 								)
@@ -364,10 +361,7 @@ export function makeLibSignalRepository(
 							}
 						} catch (error) {
 							// Log but don't fail decryption - identity tracking is best-effort
-							logger.warn(
-								{ jid, error: (error as Error).message },
-								'Failed to save identity key during decryption'
-							)
+							logger.warn({ jid, error: (error as Error).message }, 'Failed to save identity key during decryption')
 						}
 					}
 				}
@@ -635,6 +629,7 @@ const jidToSignalProtocolAddress = (jid: string): libsignal.ProtocolAddress => {
 	if (!decoded) {
 		throw new Error(`Failed to decode JID: "${jid}"`)
 	}
+
 	const { user, device, server, domainType } = decoded
 
 	if (!user) {
@@ -661,24 +656,25 @@ const jidToSignalSenderKeyName = (group: string, user: string): SenderKeyName =>
  * Extended SignalStorage with identity key management
  * This type adds identity key operations to the standard Signal storage
  */
-type ExtendedSignalStorage = SenderKeyStore & libsignal.SignalStorage & {
-	/**
-	 * Load identity key for a contact
-	 * @param id - Signal protocol address string
-	 * @returns Identity key bytes or undefined if not found
-	 */
-	loadIdentityKey(id: string): Promise<Uint8Array | undefined>
+type ExtendedSignalStorage = SenderKeyStore &
+	libsignal.SignalStorage & {
+		/**
+		 * Load identity key for a contact
+		 * @param id - Signal protocol address string
+		 * @returns Identity key bytes or undefined if not found
+		 */
+		loadIdentityKey(id: string): Promise<Uint8Array | undefined>
 
-	/**
-	 * Save/update identity key for a contact
-	 * Handles Trust On First Use (TOFU) and change detection
-	 *
-	 * @param id - Signal protocol address string
-	 * @param identityKey - The identity key bytes (33 bytes with type prefix)
-	 * @returns Result indicating if key changed, is new, and fingerprints
-	 */
-	saveIdentity(id: string, identityKey: Uint8Array): Promise<IdentitySaveResult>
-}
+		/**
+		 * Save/update identity key for a contact
+		 * Handles Trust On First Use (TOFU) and change detection
+		 *
+		 * @param id - Signal protocol address string
+		 * @param identityKey - The identity key bytes (33 bytes with type prefix)
+		 * @returns Result indicating if key changed, is new, and fingerprints
+		 */
+		saveIdentity(id: string, identityKey: Uint8Array): Promise<IdentitySaveResult>
+	}
 
 function signalStorage(
 	{ creds, keys }: SignalAuthState,
@@ -829,9 +825,7 @@ function signalStorage(
 
 				// Check if keys match
 				const keysMatch =
-					existingKey &&
-					existingKey.length === identityKey.length &&
-					existingKey.every((byte, i) => byte === identityKey[i])
+					existingKey?.length === identityKey.length && existingKey.every((byte, i) => byte === identityKey[i])
 
 				if (existingKey && !keysMatch) {
 					// IDENTITY KEY CHANGED - contact reinstalled WhatsApp or switched devices
@@ -840,7 +834,7 @@ function signalStorage(
 					// Delete old session and save new identity key atomically
 					await keys.set({
 						session: { [wireJid]: null },
-						'identity-key': { [wireJid]: identityKey },
+						'identity-key': { [wireJid]: identityKey }
 					})
 
 					// Update cache
@@ -856,7 +850,7 @@ function signalStorage(
 							previousKeyFingerprint: previousFingerprint,
 							newKeyFingerprint: currentFingerprint,
 							timestamp: Date.now(),
-							isNewContact: false,
+							isNewContact: false
 						})
 					}
 
@@ -865,7 +859,7 @@ function signalStorage(
 							event: 'identity_key_changed',
 							jid: wireJid,
 							previousFingerprint,
-							newFingerprint: currentFingerprint,
+							newFingerprint: currentFingerprint
 						},
 						'Contact identity key changed - security code changed'
 					)
@@ -874,7 +868,7 @@ function signalStorage(
 						changed: true,
 						isNew: false,
 						previousFingerprint,
-						currentFingerprint,
+						currentFingerprint
 					}
 				}
 
@@ -895,14 +889,14 @@ function signalStorage(
 							previousKeyFingerprint: null,
 							newKeyFingerprint: currentFingerprint,
 							timestamp: Date.now(),
-							isNewContact: true,
+							isNewContact: true
 						})
 					}
 
 					return {
 						changed: false,
 						isNew: true,
-						currentFingerprint,
+						currentFingerprint
 					}
 				}
 
@@ -910,11 +904,11 @@ function signalStorage(
 				return {
 					changed: false,
 					isNew: false,
-					currentFingerprint,
+					currentFingerprint
 				}
 			} finally {
 				timer?.()
 			}
-		},
+		}
 	}
 }

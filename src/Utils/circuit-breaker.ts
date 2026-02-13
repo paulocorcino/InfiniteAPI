@@ -162,15 +162,17 @@ export class CircuitBreaker extends EventEmitter {
 			volumeThreshold: options.volumeThreshold ?? 5,
 			shouldCountError: options.shouldCountError ?? (() => true),
 			collectMetrics: options.collectMetrics ?? true,
-			fallback: options.fallback ?? (() => {
-				throw new CircuitOpenError(this.options.name, this.state)
-			}),
+			fallback:
+				options.fallback ??
+				(() => {
+					throw new CircuitOpenError(this.options.name, this.state)
+				}),
 			onStateChange: options.onStateChange ?? (() => {}),
 			onFailure: options.onFailure ?? (() => {}),
 			onSuccess: options.onSuccess ?? (() => {}),
 			onOpen: options.onOpen ?? (() => {}),
 			onClose: options.onClose ?? (() => {}),
-			onHalfOpen: options.onHalfOpen ?? (() => {}),
+			onHalfOpen: options.onHalfOpen ?? (() => {})
 		}
 
 		this.lastStateChange = Date.now()
@@ -256,11 +258,11 @@ export class CircuitBreaker extends EventEmitter {
 			}, this.options.timeout)
 
 			Promise.resolve(operation())
-				.then((result) => {
+				.then(result => {
 					clearTimeout(timer)
 					resolve(result)
 				})
-				.catch((error) => {
+				.catch(error => {
 					clearTimeout(timer)
 					reject(error)
 				})
@@ -327,10 +329,7 @@ export class CircuitBreaker extends EventEmitter {
 			// Check if we should trip the circuit
 			const recentFailures = this.failureRecords.length
 
-			if (
-				this.totalCalls >= this.options.volumeThreshold &&
-				recentFailures >= this.options.failureThreshold
-			) {
+			if (this.totalCalls >= this.options.volumeThreshold && recentFailures >= this.options.failureThreshold) {
 				this.transitionTo('open')
 			}
 		}
@@ -341,9 +340,7 @@ export class CircuitBreaker extends EventEmitter {
 	 */
 	private cleanOldFailures(): void {
 		const cutoff = Date.now() - this.options.failureWindow
-		this.failureRecords = this.failureRecords.filter(
-			(record) => record.timestamp > cutoff
-		)
+		this.failureRecords = this.failureRecords.filter(record => record.timestamp > cutoff)
 	}
 
 	/**
@@ -451,9 +448,7 @@ export class CircuitBreaker extends EventEmitter {
 	getStats(): CircuitBreakerStats {
 		this.cleanOldFailures()
 
-		const failureRate = this.totalCalls > 0
-			? (this.totalFailures / this.totalCalls) * 100
-			: 0
+		const failureRate = this.totalCalls > 0 ? (this.totalFailures / this.totalCalls) * 100 : 0
 
 		return {
 			state: this.state,
@@ -471,7 +466,7 @@ export class CircuitBreaker extends EventEmitter {
 			lastStateChange: this.lastStateChange,
 			isOpen: this.isOpen(),
 			isClosed: this.isClosed(),
-			isHalfOpen: this.isHalfOpen(),
+			isHalfOpen: this.isHalfOpen()
 		}
 	}
 
@@ -489,6 +484,7 @@ export class CircuitBreaker extends EventEmitter {
 		if (this.resetTimer) {
 			clearTimeout(this.resetTimer)
 		}
+
 		this.failureRecords = []
 		this.removeAllListeners()
 	}
@@ -515,6 +511,7 @@ export class CircuitBreakerRegistry {
 			const breaker = new CircuitBreaker({ ...options, name })
 			this.breakers.set(name, breaker)
 		}
+
 		return this.breakers.get(name)!
 	}
 
@@ -534,6 +531,7 @@ export class CircuitBreakerRegistry {
 			breaker.destroy()
 			return this.breakers.delete(name)
 		}
+
 		return false
 	}
 
@@ -552,6 +550,7 @@ export class CircuitBreakerRegistry {
 		for (const [name, breaker] of this.breakers) {
 			stats[name] = breaker.getStats()
 		}
+
 		return stats
 	}
 
@@ -571,6 +570,7 @@ export class CircuitBreakerRegistry {
 		for (const breaker of this.breakers.values()) {
 			breaker.destroy()
 		}
+
 		this.breakers.clear()
 	}
 }
@@ -624,7 +624,7 @@ export function circuitBreaker(options: Omit<CircuitBreakerOptions, 'name'> & { 
  * )
  * ```
  */
-export function withCircuitBreaker<T extends (...args: unknown[]) => unknown>(
+export function withCircuitBreaker<T extends(...args: unknown[]) => unknown>(
 	fn: T,
 	options: CircuitBreakerOptions
 ): T {
@@ -655,7 +655,7 @@ export function getCircuitHealth(): {
 	return {
 		healthy: openCircuits.length === 0,
 		openCircuits,
-		stats,
+		stats
 	}
 }
 
@@ -676,19 +676,8 @@ export function getCircuitHealth(): {
  * }
  * ```
  */
-export function createPreKeyCircuitBreaker(
-	customOptions?: Partial<CircuitBreakerOptions>
-): CircuitBreaker {
-	const preKeyErrorPatterns = [
-		'prekey',
-		'pre-key',
-		'session',
-		'signal',
-		'encrypt',
-		'decrypt',
-		'cipher',
-		'key',
-	]
+export function createPreKeyCircuitBreaker(customOptions?: Partial<CircuitBreakerOptions>): CircuitBreaker {
+	const preKeyErrorPatterns = ['prekey', 'pre-key', 'session', 'signal', 'encrypt', 'decrypt', 'cipher', 'key']
 
 	return new CircuitBreaker({
 		name: 'prekey-operations',
@@ -698,18 +687,16 @@ export function createPreKeyCircuitBreaker(
 		successThreshold: 2,
 		shouldCountError: (error: Error) => {
 			const message = error.message.toLowerCase()
-			return preKeyErrorPatterns.some((pattern) => message.includes(pattern))
+			return preKeyErrorPatterns.some(pattern => message.includes(pattern))
 		},
-		...customOptions,
+		...customOptions
 	})
 }
 
 /**
  * Create a circuit breaker for WebSocket connection operations
  */
-export function createConnectionCircuitBreaker(
-	customOptions?: Partial<CircuitBreakerOptions>
-): CircuitBreaker {
+export function createConnectionCircuitBreaker(customOptions?: Partial<CircuitBreakerOptions>): CircuitBreaker {
 	const connectionErrorPatterns = [
 		'econnrefused',
 		'econnreset',
@@ -718,7 +705,7 @@ export function createConnectionCircuitBreaker(
 		'socket',
 		'websocket',
 		'connection',
-		'network',
+		'network'
 	]
 
 	return new CircuitBreaker({
@@ -730,20 +717,16 @@ export function createConnectionCircuitBreaker(
 		shouldCountError: (error: Error) => {
 			const message = error.message.toLowerCase()
 			const code = (error as NodeJS.ErrnoException).code?.toLowerCase() || ''
-			return connectionErrorPatterns.some(
-				(pattern) => message.includes(pattern) || code.includes(pattern)
-			)
+			return connectionErrorPatterns.some(pattern => message.includes(pattern) || code.includes(pattern))
 		},
-		...customOptions,
+		...customOptions
 	})
 }
 
 /**
  * Create a circuit breaker for message sending operations
  */
-export function createMessageCircuitBreaker(
-	customOptions?: Partial<CircuitBreakerOptions>
-): CircuitBreaker {
+export function createMessageCircuitBreaker(customOptions?: Partial<CircuitBreakerOptions>): CircuitBreaker {
 	return new CircuitBreaker({
 		name: 'message-operations',
 		failureThreshold: 5,
@@ -751,7 +734,7 @@ export function createMessageCircuitBreaker(
 		resetTimeout: 15000,
 		successThreshold: 2,
 		timeout: 30000,
-		...customOptions,
+		...customOptions
 	})
 }
 

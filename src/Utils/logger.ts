@@ -55,8 +55,8 @@ function loadLoggerConfig(): LoggerConfig {
 		levelFilters: {
 			info: process.env.LOGGER_INFO !== 'false',
 			warn: process.env.LOGGER_WARN !== 'false',
-			error: process.env.LOGGER_ERROR !== 'false',
-		},
+			error: process.env.LOGGER_ERROR !== 'false'
+		}
 	}
 }
 
@@ -89,7 +89,7 @@ function createFilteredLogger(baseLogger: PinoLogger, config: LoggerConfig): ILo
 		debug: baseLogger.debug.bind(baseLogger),
 		info: config.levelFilters.info ? baseLogger.info.bind(baseLogger) : noop,
 		warn: config.levelFilters.warn ? baseLogger.warn.bind(baseLogger) : noop,
-		error: config.levelFilters.error ? baseLogger.error.bind(baseLogger) : noop,
+		error: config.levelFilters.error ? baseLogger.error.bind(baseLogger) : noop
 	}
 }
 
@@ -98,6 +98,7 @@ function createFilteredLogger(baseLogger: PinoLogger, config: LoggerConfig): ILo
  */
 function createSilentLogger(): ILogger {
 	const noop = () => {}
+
 	const silentLogger: ILogger = {
 		level: 'silent',
 		child: () => silentLogger,
@@ -105,7 +106,7 @@ function createSilentLogger(): ILogger {
 		debug: noop,
 		info: noop,
 		warn: noop,
-		error: noop,
+		error: noop
 	}
 	return silentLogger
 }
@@ -124,7 +125,7 @@ function createLogger(): ILogger {
 	// Create pino options
 	const pinoOptions: P.LoggerOptions = {
 		level: config.level,
-		timestamp: () => `,"time":"${new Date().toJSON()}"`,
+		timestamp: () => `,"time":"${new Date().toJSON()}"`
 	}
 
 	// Add pretty printing when explicitly set and available
@@ -134,8 +135,8 @@ function createLogger(): ILogger {
 			options: {
 				colorize: true,
 				translateTime: 'SYS:standard',
-				ignore: 'pid,hostname',
-			},
+				ignore: 'pid,hostname'
+			}
 		}
 	}
 

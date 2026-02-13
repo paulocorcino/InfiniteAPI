@@ -253,7 +253,11 @@ export const fetchLatestBaileysVersion = async (options: RequestInit = {}) => {
 		const versionMatch = versionLine.match(/const version = \[(\d+),\s*(\d+),\s*(\d+)\]/)
 
 		if (versionMatch) {
-			const version = [parseInt(versionMatch[1] ?? '0'), parseInt(versionMatch[2] ?? '0'), parseInt(versionMatch[3] ?? '0')] as WAVersion
+			const version = [
+				parseInt(versionMatch[1] ?? '0'),
+				parseInt(versionMatch[2] ?? '0'),
+				parseInt(versionMatch[3] ?? '0')
+			] as WAVersion
 
 			return {
 				version,

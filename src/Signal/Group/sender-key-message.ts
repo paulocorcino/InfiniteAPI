@@ -42,6 +42,7 @@ export class SenderKeyMessage extends CiphertextMessage {
 					: senderKeyMessage.ciphertext
 			this.signature = signature
 		} else {
+			// eslint-disable-next-line eqeqeq
 			if (ciphertext == null || keyId == null || iteration == null || signatureKey == null) {
 				throw new Error('Missing required parameters for SenderKeyMessage construction')
 			}

@@ -9,8 +9,8 @@
  */
 
 import { proto } from '../../../WAProto/index.js'
-import { metrics } from '../../Utils/prometheus-metrics.js'
 import { NO_MESSAGE_FOUND_ERROR_TEXT } from '../../Utils/decode-wa-message.js'
+import { metrics } from '../../Utils/prometheus-metrics.js'
 
 describe('CTWA Recovery', () => {
 	describe('Message Detection', () => {

@@ -19,6 +19,7 @@ export abstract class AbstractSocketClient extends EventEmitter {
 		if (maxListeners === 0) {
 			this.config.logger?.warn('SocketClient setMaxListeners(0) allows UNLIMITED listeners - potential memory leak!')
 		}
+
 		this.setMaxListeners(maxListeners)
 	}
 

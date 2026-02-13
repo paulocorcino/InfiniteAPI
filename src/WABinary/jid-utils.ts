@@ -106,11 +106,9 @@ export const isHostedPnUser = (jid: string | undefined) => jid?.endsWith('@hoste
 /** is the jid a hosted LID */
 export const isHostedLidUser = (jid: string | undefined) => jid?.endsWith('@hosted.lid')
 /** is the jid any LID (regular or hosted) */
-export const isAnyLidUser = (jid: string | undefined) =>
-	!!(isLidUser(jid) || isHostedLidUser(jid))
+export const isAnyLidUser = (jid: string | undefined) => !!(isLidUser(jid) || isHostedLidUser(jid))
 /** is the jid any PN user (regular or hosted) */
-export const isAnyPnUser = (jid: string | undefined) =>
-	!!(isPnUser(jid) || isHostedPnUser(jid))
+export const isAnyPnUser = (jid: string | undefined) => !!(isPnUser(jid) || isHostedPnUser(jid))
 
 const botRegexp = /^1313555\d{4}$|^131655500\d{2}$/
 

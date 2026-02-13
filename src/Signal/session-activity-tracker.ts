@@ -70,7 +70,7 @@ export const makeSessionActivityTracker = (
 	let flushInterval: ReturnType<typeof setInterval> | null = null
 
 	// Statistics
-	let stats = {
+	const stats = {
 		totalUpdates: 0,
 		totalFlushes: 0,
 		lastFlushAt: 0,

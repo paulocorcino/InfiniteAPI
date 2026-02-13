@@ -2,15 +2,15 @@
  * Testes unitários para structured-logger.ts
  */
 
-import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals'
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import {
-	StructuredLogger,
 	createStructuredLogger,
-	getDefaultLogger,
-	setDefaultLogger,
 	createTimer,
+	getDefaultLogger,
 	LOG_LEVEL_VALUES,
 	type LogLevel,
+	setDefaultLogger,
+	StructuredLogger
 } from '../../Utils/structured-logger.js'
 
 describe('StructuredLogger', () => {
@@ -21,7 +21,7 @@ describe('StructuredLogger', () => {
 		logger = createStructuredLogger({
 			level: 'debug',
 			name: 'test',
-			jsonFormat: false,
+			jsonFormat: false
 		})
 		consoleSpy = jest.spyOn(console, 'info').mockImplementation(() => {})
 		jest.spyOn(console, 'debug').mockImplementation(() => {})
@@ -95,14 +95,14 @@ describe('StructuredLogger', () => {
 		it('should redact sensitive fields', () => {
 			const jsonLogger = createStructuredLogger({
 				level: 'info',
-				jsonFormat: true,
+				jsonFormat: true
 			})
 
 			// O logger deve sanitizar campos sensíveis
 			jsonLogger.info({
 				user: 'test',
 				password: 'secret123',
-				token: 'abc123',
+				token: 'abc123'
 			})
 
 			expect(consoleSpy).toHaveBeenCalled()
@@ -167,7 +167,7 @@ describe('StructuredLogger', () => {
 		it('should measure elapsed time', async () => {
 			const timer = createTimer()
 
-			await new Promise((resolve) => setTimeout(resolve, 10))
+			await new Promise(resolve => setTimeout(resolve, 10))
 
 			const elapsed = timer.elapsed()
 			expect(elapsed).toBeGreaterThan(0)
@@ -176,7 +176,7 @@ describe('StructuredLogger', () => {
 		it('should format elapsed time', async () => {
 			const timer = createTimer()
 
-			await new Promise((resolve) => setTimeout(resolve, 5))
+			await new Promise(resolve => setTimeout(resolve, 5))
 
 			const formatted = timer.elapsedMs()
 			expect(formatted).toMatch(/\d+\.\d+ms/)

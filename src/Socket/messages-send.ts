@@ -16,7 +16,6 @@ import type {
 	WAMessage,
 	WAMessageKey
 } from '../Types'
-import { logMessageSent } from '../Utils/baileys-logger'
 import {
 	aggregateMessageKeysNotFromMe,
 	assertMediaContent,
@@ -40,8 +39,10 @@ import {
 	parseAndInjectE2ESessions,
 	unixTimestampSeconds
 } from '../Utils'
+import { logMessageSent } from '../Utils/baileys-logger'
 import { getUrlInfo } from '../Utils/link-preview'
 import { makeKeyedMutex } from '../Utils/make-mutex'
+import { metrics, recordMessageFailure, recordMessageRetry, recordMessageSent } from '../Utils/prometheus-metrics'
 import { getMessageReportingToken, shouldIncludeReportingToken } from '../Utils/reporting-utils'
 import {
 	areJidsSameUser,
@@ -65,7 +66,6 @@ import {
 	S_WHATSAPP_NET
 } from '../WABinary'
 import { USyncQuery, USyncUser } from '../WAUSync'
-import { recordMessageSent, recordMessageRetry, recordMessageFailure, metrics } from '../Utils/prometheus-metrics'
 import { makeNewsletterSocket } from './newsletter'
 
 export const makeMessagesSocket = (config: SocketConfig) => {
@@ -331,12 +331,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			if (!meId) throw new Boom('Not authenticated', { statusCode: 401 })
 			const meLid = authState.creds.me?.lid || ''
 
-			const extracted = extractDeviceJids(
-				result?.list,
-				meId,
-				meLid,
-				ignoreZeroDevices
-			)
+			const extracted = extractDeviceJids(result?.list, meId, meLid, ignoreZeroDevices)
 			const deviceMap: { [_: string]: FullJid[] } = {}
 
 			for (const item of extracted) {
@@ -465,9 +460,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			const wireJids = [
 				...jidsRequiringFetch.filter(jid => isAnyLidUser(jid)),
 				...(
-					(await signalRepository.lidMapping.getLIDsForPNs(
-						jidsRequiringFetch.filter(jid => isAnyPnUser(jid))
-					)) || []
+					(await signalRepository.lidMapping.getLIDsForPNs(jidsRequiringFetch.filter(jid => isAnyPnUser(jid)))) || []
 				).map(a => a.lid)
 			]
 
@@ -650,6 +643,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			if (message.interactiveMessage.nativeFlowMessage) {
 				return 'native_flow'
 			}
+
 			// Check if it's a carousel with nativeFlowMessage buttons in cards
 			if (message.interactiveMessage.carouselMessage?.cards?.length) {
 				const hasNativeFlowButtons = message.interactiveMessage.carouselMessage.cards.some(
@@ -659,6 +653,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					return 'native_flow'
 				}
 			}
+
 			// Check if it's a collection/product carousel
 			if (message.interactiveMessage.carouselMessage?.cards?.length) {
 				const hasCollectionCards = message.interactiveMessage.carouselMessage.cards.some(
@@ -668,6 +663,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					return 'native_flow'
 				}
 			}
+
 			return 'interactive'
 		}
 
@@ -693,6 +689,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				if (innerMessage.interactiveMessage.nativeFlowMessage) {
 					return 'native_flow'
 				}
+
 				// Check if it's a carousel with nativeFlowMessage buttons in cards
 				if (innerMessage.interactiveMessage.carouselMessage?.cards?.length) {
 					const hasNativeFlowButtons = innerMessage.interactiveMessage.carouselMessage.cards.some(
@@ -702,6 +699,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						return 'native_flow'
 					}
 				}
+
 				// Check if it's a collection/product carousel
 				if (innerMessage.interactiveMessage.carouselMessage?.cards?.length) {
 					const hasCollectionCards = innerMessage.interactiveMessage.carouselMessage.cards.some(
@@ -711,6 +709,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						return 'native_flow'
 					}
 				}
+
 				return 'interactive'
 			}
 		}
@@ -727,7 +726,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 		// For native_flow messages, check for special button types that need specific attributes
 		if (buttonType === 'native_flow') {
-			const interactiveMsg = message.interactiveMessage ||
+			const interactiveMsg =
+				message.interactiveMessage ||
 				message.viewOnceMessage?.message?.interactiveMessage ||
 				message.viewOnceMessageV2?.message?.interactiveMessage
 
@@ -758,7 +758,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 	 * Carousels should NOT have the bot node injected as they are not bot messages
 	 */
 	const isCarouselMessage = (message: proto.IMessage): boolean => {
-		const interactiveMsg = message.interactiveMessage ||
+		const interactiveMsg =
+			message.interactiveMessage ||
 			message.viewOnceMessage?.message?.interactiveMessage ||
 			message.viewOnceMessageV2?.message?.interactiveMessage
 
@@ -774,7 +775,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 	 * These messages may need different biz node handling or no biz node at all
 	 */
 	const isCatalogMessage = (message: proto.IMessage): boolean => {
-		const interactiveMsg = message.interactiveMessage ||
+		const interactiveMsg =
+			message.interactiveMessage ||
 			message.viewOnceMessage?.message?.interactiveMessage ||
 			message.viewOnceMessageV2?.message?.interactiveMessage
 
@@ -782,9 +784,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		if (nativeFlow?.buttons?.length) {
 			// Check if any button is a catalog-type button
 			return nativeFlow.buttons.some(
-				(btn: any) => btn?.name === 'catalog_message' ||
-				              btn?.name === 'single_product' ||
-				              btn?.name === 'product_list'
+				(btn: any) => btn?.name === 'catalog_message' || btn?.name === 'single_product' || btn?.name === 'product_list'
 			)
 		}
 
@@ -796,16 +796,15 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 	 * Lists need type='list' in the biz node instead of type='native_flow'
 	 */
 	const isListNativeFlow = (message: proto.IMessage): boolean => {
-		const interactiveMsg = message.interactiveMessage ||
+		const interactiveMsg =
+			message.interactiveMessage ||
 			message.viewOnceMessage?.message?.interactiveMessage ||
 			message.viewOnceMessageV2?.message?.interactiveMessage
 
 		const nativeFlow = interactiveMsg?.nativeFlowMessage
 		if (nativeFlow?.buttons?.length) {
 			// Check if any button is a list-type button (single_select or multi_select)
-			return nativeFlow.buttons.some(
-				(btn: any) => btn?.name === 'single_select' || btn?.name === 'multi_select'
-			)
+			return nativeFlow.buttons.some((btn: any) => btn?.name === 'single_select' || btn?.name === 'multi_select')
 		}
 
 		return false
@@ -852,9 +851,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		const innerMsg = message.viewOnceMessage?.message
 		const nativeFlow = innerMsg?.interactiveMessage?.nativeFlowMessage
 		if (nativeFlow?.buttons?.length) {
-			const singleSelectBtn = nativeFlow.buttons.find(
-				(btn: any) => btn?.name === 'single_select'
-			)
+			const singleSelectBtn = nativeFlow.buttons.find((btn: any) => btn?.name === 'single_select')
 			if (singleSelectBtn?.buttonParamsJson) {
 				try {
 					const params = JSON.parse(singleSelectBtn.buttonParamsJson)
@@ -1156,6 +1153,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							logger.debug({ jid }, '[CAROUSEL] Skipping own device - DSM carousel causes error 479')
 							continue
 						}
+
 						meRecipients.push(jid)
 					} else {
 						otherRecipients.push(jid)
@@ -1212,7 +1210,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					attrs: {
 						v: '2',
 						type,
-						count: participant!.count.toString()
+						count: participant.count.toString()
 					},
 					content: encryptedContent
 				})
@@ -1257,8 +1255,14 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				const startTime = Date.now()
 
 				// Debug: Log message structure to diagnose list detection
-				const interactiveMsg = message.interactiveMessage || message.viewOnceMessage?.message?.interactiveMessage || message.viewOnceMessageV2?.message?.interactiveMessage
-				const listMsg = message.listMessage || message.viewOnceMessage?.message?.listMessage || message.viewOnceMessageV2?.message?.listMessage
+				const interactiveMsg =
+					message.interactiveMessage ||
+					message.viewOnceMessage?.message?.interactiveMessage ||
+					message.viewOnceMessageV2?.message?.interactiveMessage
+				const listMsg =
+					message.listMessage ||
+					message.viewOnceMessage?.message?.listMessage ||
+					message.viewOnceMessageV2?.message?.listMessage
 				const nativeFlowButtons = interactiveMsg?.nativeFlowMessage?.buttons || []
 				const isListDetected = isListNativeFlow(message)
 
@@ -1323,10 +1327,10 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						// Note: '' (empty) causes error 405 rejection from WhatsApp server
 						// Special flows (payment, mpm, order) use specific names
 						const SPECIAL_FLOW_NAMES: Record<string, string> = {
-							'review_and_pay': 'payment_info',
-							'payment_info': 'payment_info',
-							'mpm': 'mpm',
-							'review_order': 'order_details'
+							review_and_pay: 'payment_info',
+							payment_info: 'payment_info',
+							mpm: 'mpm',
+							review_order: 'order_details'
 						}
 						const firstButtonName = allButtonNames[0] || ''
 						const nativeFlowName = SPECIAL_FLOW_NAMES[firstButtonName] || 'mixed'
@@ -1370,11 +1374,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					// - quick_reply buttons with bot node: only smartphone, not Web ❌
 					const isNativeFlowButtons = buttonType === 'native_flow'
 
-					const isPrivateUserChat = (
-						isPnUser(destinationJid) ||
-						isLidUser(destinationJid) ||
-						destinationJid?.endsWith('@c.us')
-					) && !isJidBot(destinationJid)
+					const isPrivateUserChat =
+						(isPnUser(destinationJid) || isLidUser(destinationJid) || destinationJid?.endsWith('@c.us')) &&
+						!isJidBot(destinationJid)
 
 					if (isPrivateUserChat && !isCarousel && !isCatalog && buttonType !== 'list' && !isNativeFlowButtons) {
 						;(stanza.content as BinaryNode[]).push({
@@ -1406,10 +1408,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					metrics.interactiveMessagesSuccess.inc({ type: buttonType })
 					metrics.interactiveMessagesLatency.observe({ type: buttonType }, Date.now() - startTime)
 				} catch (error) {
-					logger.error(
-						{ error, msgId, buttonType },
-						'[EXPERIMENTAL] Failed to inject biz node for interactive message'
-					)
+					logger.error({ error, msgId, buttonType }, '[EXPERIMENTAL] Failed to inject biz node for interactive message')
 					metrics.interactiveMessagesFailures.inc({ type: buttonType, reason: 'injection_failed' })
 				}
 			} else if (buttonType && !enableInteractiveMessages) {
@@ -1497,15 +1496,23 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			logMessageSent(msgId, destinationJid)
 
 			// Record message sent metric
-			const msgType = message.conversation ? 'text'
-				: message.imageMessage ? 'image'
-				: message.videoMessage ? 'video'
-				: message.audioMessage ? 'audio'
-				: message.documentMessage ? 'document'
-				: message.stickerMessage ? 'sticker'
-				: message.stickerPackMessage ? 'sticker_pack'
-				: message.reactionMessage ? 'reaction'
-				: 'other'
+			const msgType = message.conversation
+				? 'text'
+				: message.imageMessage
+					? 'image'
+					: message.videoMessage
+						? 'video'
+						: message.audioMessage
+							? 'audio'
+							: message.documentMessage
+								? 'document'
+								: message.stickerMessage
+									? 'sticker'
+									: message.stickerPackMessage
+										? 'sticker_pack'
+										: message.reactionMessage
+											? 'reaction'
+											: 'other'
 			recordMessageSent(msgType)
 
 			// Add message to retry cache if enabled
@@ -1728,17 +1735,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			const startTime = Date.now()
 			const userJid = authState.creds.me!.id
 
-			const {
-				medias,
-				delay: delayConfig = 'adaptive',
-				retryCount = 3,
-				continueOnFailure = true
-			} = album
+			const { medias, delay: delayConfig = 'adaptive', retryCount = 3, continueOnFailure = true } = album
 
 			// Validation (also done in generateWAMessageContent, but double-check here)
 			if (!medias || medias.length < 2) {
 				throw new Boom('Album must have at least 2 media items', { statusCode: 400 })
 			}
+
 			if (medias.length > 10) {
 				throw new Boom('Album cannot have more than 10 media items (WhatsApp limit)', { statusCode: 400 })
 			}
@@ -1754,25 +1757,30 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			)
 
 			// Generate album root message first (with counts of expected media)
-			const albumRootMsg = await generateWAMessage(jid, {
-				album: { medias, delay: delayConfig, retryCount, continueOnFailure }
-			}, {
-				logger,
-				userJid,
-				getUrlInfo: text => getUrlInfo(text, {
-					thumbnailWidth: linkPreviewImageThumbnailWidth,
-					fetchOpts: { timeout: 3_000, ...(httpRequestOptions || {}) },
+			const albumRootMsg = await generateWAMessage(
+				jid,
+				{
+					album: { medias, delay: delayConfig, retryCount, continueOnFailure }
+				},
+				{
 					logger,
-					uploadImage: generateHighQualityLinkPreview ? waUploadToServer : undefined
-				}),
-				upload: waUploadToServer,
-				mediaCache: config.mediaCache,
-				// Don't spread options here to avoid messageId collision
-				timestamp: options.timestamp,
-				quoted: options.quoted,
-				ephemeralExpiration: options.ephemeralExpiration,
-				mediaUploadTimeoutMs: options.mediaUploadTimeoutMs
-			})
+					userJid,
+					getUrlInfo: text =>
+						getUrlInfo(text, {
+							thumbnailWidth: linkPreviewImageThumbnailWidth,
+							fetchOpts: { timeout: 3_000, ...(httpRequestOptions || {}) },
+							logger,
+							uploadImage: generateHighQualityLinkPreview ? waUploadToServer : undefined
+						}),
+					upload: waUploadToServer,
+					mediaCache: config.mediaCache,
+					// Don't spread options here to avoid messageId collision
+					timestamp: options.timestamp,
+					quoted: options.quoted,
+					ephemeralExpiration: options.ephemeralExpiration,
+					mediaUploadTimeoutMs: options.mediaUploadTimeoutMs
+				}
+			)
 
 			const albumKey = albumRootMsg.key
 
@@ -1788,9 +1796,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				process.nextTick(async () => {
 					let mutexKey = albumRootMsg.key.remoteJid
 					if (!mutexKey) {
-						logger.warn({ msgId: albumRootMsg.key.id }, 'Missing remoteJid in albumRootMsg, using msg.key.id as fallback')
+						logger.warn(
+							{ msgId: albumRootMsg.key.id },
+							'Missing remoteJid in albumRootMsg, using msg.key.id as fallback'
+						)
 						mutexKey = albumRootMsg.key.id || 'unknown'
 					}
+
 					await messageMutex.mutex(mutexKey, () => upsertMessage(albumRootMsg, 'append'))
 				})
 			}
@@ -1812,7 +1824,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				const mediaTypeMultiplier = isVideo ? 2.0 : 1.0
 
 				// Later items in album get slightly more delay (cumulative load)
-				const positionMultiplier = 1 + (index * 0.1)
+				const positionMultiplier = 1 + index * 0.1
 
 				// Add some jitter to prevent predictable patterns
 				const jitter = Math.random() * 200
@@ -1827,16 +1839,14 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				if (delayConfig === 'adaptive') {
 					return calculateAdaptiveDelay(media, index)
 				}
+
 				return delayConfig
 			}
 
 			/**
 			 * Send a single media item with retry logic
 			 */
-			const sendMediaWithRetry = async (
-				media: AlbumMediaItem,
-				index: number
-			): Promise<AlbumMediaResult> => {
+			const sendMediaWithRetry = async (media: AlbumMediaItem, index: number): Promise<AlbumMediaResult> => {
 				const itemStartTime = Date.now()
 				let lastError: Error | undefined
 				let attempts = 0
@@ -1845,16 +1855,17 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					attempts = attempt + 1
 					try {
 						// Generate message for this media item
-					// NOTE: Each item needs its own unique messageId, so we don't spread options.messageId
+						// NOTE: Each item needs its own unique messageId, so we don't spread options.messageId
 						const mediaMsg = await generateWAMessage(jid, media as AnyMessageContent, {
 							logger,
 							userJid,
-							getUrlInfo: text => getUrlInfo(text, {
-								thumbnailWidth: linkPreviewImageThumbnailWidth,
-								fetchOpts: { timeout: 3_000, ...(httpRequestOptions || {}) },
-								logger,
-								uploadImage: generateHighQualityLinkPreview ? waUploadToServer : undefined
-							}),
+							getUrlInfo: text =>
+								getUrlInfo(text, {
+									thumbnailWidth: linkPreviewImageThumbnailWidth,
+									fetchOpts: { timeout: 3_000, ...(httpRequestOptions || {}) },
+									logger,
+									uploadImage: generateHighQualityLinkPreview ? waUploadToServer : undefined
+								}),
 							upload: waUploadToServer,
 							mediaCache: config.mediaCache,
 							// Don't spread ...options to avoid messageId collision
@@ -1874,6 +1885,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						if (!mediaMsg.message.messageContextInfo) {
 							mediaMsg.message.messageContextInfo = {}
 						}
+
 						mediaMsg.message.messageContextInfo.messageAssociation = {
 							associationType: proto.MessageAssociation.AssociationType.MEDIA_ALBUM,
 							parentMessageKey: albumKey
@@ -1893,14 +1905,12 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 									logger.warn({ msgId: mediaMsg.key.id }, 'Missing remoteJid in mediaMsg, using msg.key.id as fallback')
 									mutexKey = mediaMsg.key.id || 'unknown'
 								}
+
 								await messageMutex.mutex(mutexKey, () => upsertMessage(mediaMsg, 'append'))
 							})
 						}
 
-						logger.debug(
-							{ index, msgId: mediaMsg.key.id, attempts },
-							'Album media item sent successfully'
-						)
+						logger.debug({ index, msgId: mediaMsg.key.id, attempts }, 'Album media item sent successfully')
 
 						return {
 							index,
@@ -1925,10 +1935,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				}
 
 				// All retries exhausted
-				logger.error(
-					{ index, attempts, error: lastError?.message },
-					'Album media item failed after all retries'
-				)
+				logger.error({ index, attempts, error: lastError?.message }, 'Album media item failed after all retries')
 
 				return {
 					index,
@@ -2005,7 +2012,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			if (typeof content === 'object' && 'album' in content) {
 				throw new Boom(
 					'Cannot send album messages with sendMessage(). Use sendAlbumMessage() instead, ' +
-					'which properly sends the album root and individual media items.',
+						'which properly sends the album root and individual media items.',
 					{ statusCode: 400 }
 				)
 			}
@@ -2027,7 +2034,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					upload: waUploadToServer,
 					mediaCache: config.mediaCache,
 					options: config.options,
-					jid,
+					jid
 				})
 
 				// Pass the plain JS object directly to relayMessage
@@ -2037,7 +2044,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					messageId,
 					useCachedGroupMetadata: options.useCachedGroupMetadata,
 					additionalAttributes: {},
-					statusJidList: options.statusJidList,
+					statusJidList: options.statusJidList
 				})
 
 				// Build WebMessageInfo only for event emission and return value
@@ -2151,6 +2158,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							logger.warn({ msgId: fullMsg.key.id }, 'Missing remoteJid in fullMsg, using msg.key.id as fallback')
 							mutexKey = fullMsg.key.id || 'unknown'
 						}
+
 						await messageMutex.mutex(mutexKey, () => upsertMessage(fullMsg, 'append'))
 					})
 				}
