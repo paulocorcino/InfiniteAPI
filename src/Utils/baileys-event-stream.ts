@@ -310,7 +310,7 @@ export class BaileysEventStream extends EventEmitter {
 
 		// Process if not paused
 		if (!this.paused && !this.isProcessing) {
-			this.processNext()
+			void this.processNext()
 		}
 
 		return true
@@ -598,7 +598,7 @@ export class BaileysEventStream extends EventEmitter {
 	resume(): void {
 		this.paused = false
 		this.emit('resume')
-		this.processNext()
+		void this.processNext()
 	}
 
 	/**

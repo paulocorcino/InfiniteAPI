@@ -1,4 +1,3 @@
-/* eslint-disable space-before-function-paren */
 import { Boom } from '@hapi/boom'
 import { proto } from '../../WAProto/index.js'
 import type { WAMessage, WAMessageKey } from '../Types'
@@ -412,6 +411,7 @@ export const decryptMessageNode = (
 						if (isCorrupted) {
 							// Corrupted session errors are expected and auto-recovered
 							// Only log as ERROR if retries exhausted, otherwise WARN on first attempt
+							// eslint-disable-next-line max-depth
 							if (isRetryExhausted) {
 								logger.error(
 									errorContext,
@@ -423,7 +423,9 @@ export const decryptMessageNode = (
 							}
 
 							// Automatic cleanup of corrupted session (if enabled)
+							// eslint-disable-next-line max-depth
 							if (autoCleanCorrupted) {
+								// eslint-disable-next-line max-depth
 								try {
 									const deletedCount = await cleanupCorruptedSession(decryptionJid, repository, logger)
 
@@ -443,6 +445,7 @@ export const decryptMessageNode = (
 							}
 						} else if (isSessionRecord) {
 							// Session record errors are transient - retry should handle them
+							// eslint-disable-next-line max-depth
 							if (isRetryExhausted) {
 								logger.error(errorContext, `Failed to decrypt: No session record found after ${err.attempts} attempts`)
 							} else {

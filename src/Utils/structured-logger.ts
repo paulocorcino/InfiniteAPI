@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * Structured Logging System for InfiniteAPI
  *
@@ -321,7 +320,7 @@ class AsyncLogQueue {
 	enqueue(task: () => void): void {
 		if (this.destroyed) return
 		this.queue.push(task)
-		this.processNext()
+		void this.processNext()
 	}
 
 	private async processNext(): Promise<void> {

@@ -357,12 +357,14 @@ const processMessage = async (
 					// This is how WhatsApp Web learns mappings for chats with non-contacts
 					if (data.lidPnMappings?.length) {
 						logger?.debug({ count: data.lidPnMappings.length }, 'processing LID-PN mappings from history sync')
+						// eslint-disable-next-line max-depth
 						try {
 							const result = await signalRepository.lidMapping.storeLIDPNMappings(data.lidPnMappings)
 							logger?.debug(
 								{ stored: result.stored, skipped: result.skipped, errors: result.errors },
 								'stored LID-PN mappings from history sync'
 							)
+							// eslint-disable-next-line max-depth
 							if (result.stored > 0) {
 								logger?.info({ stored: result.stored }, 'fallback LID mappings are now available from history sync')
 							}
@@ -371,6 +373,7 @@ const processMessage = async (
 						}
 
 						// Emit all mappings at once for better performance
+						// eslint-disable-next-line max-depth
 						if (data.lidPnMappings.length > 0) {
 							ev.emit('lid-mapping.update', data.lidPnMappings)
 						}
@@ -462,6 +465,7 @@ const processMessage = async (
 						const { placeholderMessageResendResponse: retryResponse } = result
 						//eslint-disable-next-line max-depth
 						if (retryResponse) {
+							// eslint-disable-next-line max-depth
 							if (!retryResponse.webMessageInfoBytes) {
 								continue
 							}
@@ -470,8 +474,10 @@ const processMessage = async (
 
 							// Merge cached metadata with decoded message
 							// This ensures we don't lose critical information like pushName and LID mappings
+							// eslint-disable-next-line max-depth
 							if (cachedData && typeof cachedData === 'object') {
 								// Preserve pushName if not present in PDO response
+								// eslint-disable-next-line max-depth
 								if (cachedData.pushName && !webMessageInfo.pushName) {
 									webMessageInfo.pushName = cachedData.pushName
 									logger?.debug({ msgId: webMessageInfo.key?.id }, 'CTWA: Restored pushName from cached metadata')
@@ -479,8 +485,10 @@ const processMessage = async (
 
 								// Preserve participantAlt (LID) if not present in PDO response
 								// This is critical for maintaining LID/PN mapping in groups
+								// eslint-disable-next-line max-depth
 								if (cachedData.participantAlt && webMessageInfo.key) {
 									const msgKey = webMessageInfo.key as WAMessageKey
+									// eslint-disable-next-line max-depth
 									if (!msgKey.participantAlt) {
 										msgKey.participantAlt = cachedData.participantAlt
 										logger?.debug(
@@ -491,6 +499,7 @@ const processMessage = async (
 								}
 
 								// Preserve original participant if not in PDO response
+								// eslint-disable-next-line max-depth
 								if (cachedData.participant && webMessageInfo.key && !webMessageInfo.key.participant) {
 									webMessageInfo.key.participant = cachedData.participant
 									logger?.debug({ msgId: webMessageInfo.key?.id }, 'CTWA: Restored participant from cached metadata')
@@ -498,6 +507,7 @@ const processMessage = async (
 
 								// Only use cached timestamp if PDO response doesn't have one
 								// PDO response timestamp is more authoritative if present
+								// eslint-disable-next-line max-depth
 								if (!webMessageInfo.messageTimestamp && cachedData.messageTimestamp) {
 									webMessageInfo.messageTimestamp = cachedData.messageTimestamp
 								}

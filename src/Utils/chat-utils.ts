@@ -216,7 +216,7 @@ export const decodeSyncdMutations = async (
 		// if it's a syncdmutation, get the operation property
 		// otherwise, if it's only a record -- it'll be a SET mutation
 		const operation = 'operation' in msgMutation ? msgMutation.operation : proto.SyncdMutation.SyncdOperation.SET
-		// eslint-disable-next-line eqeqeq
+
 		if (operation == null) {
 			throw new Boom('Missing operation in mutation', { statusCode: 500 })
 		}
@@ -343,7 +343,7 @@ export const decodeSyncdPatch = async (
 		}
 
 		const msgVersion = msg.version?.version
-		// eslint-disable-next-line eqeqeq
+
 		if (msgVersion == null) {
 			throw new Boom('Missing version in patch message', { statusCode: 500 })
 		}
@@ -446,7 +446,7 @@ export const decodeSyncdSnapshot = async (
 	const newState = newLTHashState()
 
 	const snapshotVersion = snapshot.version?.version
-	// eslint-disable-next-line eqeqeq
+
 	if (snapshotVersion == null) {
 		throw new Boom('Missing version in snapshot', { statusCode: 500 })
 	}
@@ -540,7 +540,6 @@ export const decodePatches = async (
 
 		const ver = version?.version
 		if (ver == null) {
-		// eslint-disable-next-line eqeqeq
 			throw new Boom('Missing version in patch', { statusCode: 500 })
 		}
 

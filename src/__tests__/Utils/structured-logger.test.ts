@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * Testes unitários para structured-logger.ts
  */
@@ -9,7 +8,6 @@ import {
 	createTimer,
 	getDefaultLogger,
 	LOG_LEVEL_VALUES,
-	type LogLevel,
 	setDefaultLogger,
 	StructuredLogger
 } from '../../Utils/structured-logger.js'

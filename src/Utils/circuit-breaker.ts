@@ -1,4 +1,3 @@
-/* eslint-disable max-depth */
 /**
  * Circuit Breaker Pattern Implementation
  *
@@ -625,6 +624,7 @@ export function circuitBreaker(options: Omit<CircuitBreakerOptions, 'name'> & { 
  * )
  * ```
  */
+// eslint-disable-next-line space-before-function-paren
 export function withCircuitBreaker<T extends (...args: unknown[]) => unknown>(
 	fn: T,
 	options: CircuitBreakerOptions

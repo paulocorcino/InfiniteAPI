@@ -1,4 +1,3 @@
-/* eslint-disable prefer-const */
 /**
  * Smart Retry Logic
  *
@@ -452,6 +451,7 @@ export function withRetry(options: RetryOptions = {}) {
 /**
  * Wrapper for function with retry
  */
+// eslint-disable-next-line space-before-function-paren
 export function retryable<T extends (...args: unknown[]) => unknown>(
 	fn: T,
 	options: RetryOptions = {}

@@ -1,4 +1,3 @@
-/* eslint-disable max-depth, @typescript-eslint/no-unused-vars */
 /**
  * Prometheus Metrics Exposition - Enterprise Grade
  *
@@ -100,6 +99,7 @@ export function getConfiguredPrefix(): string {
 /**
  * Check if a metric with the given name already exists in the custom registry
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function metricExists(name: string): boolean {
 	const fullName = getFullMetricName(name)
 	try {
@@ -113,6 +113,7 @@ function metricExists(name: string): boolean {
 /**
  * Get an existing metric from the custom registry
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function getExistingMetric<T>(name: string): T | undefined {
 	const fullName = getFullMetricName(name)
 	try {
@@ -1926,7 +1927,8 @@ export function updateBufferStatistics(stats: {
  * Record a cache cleanup operation
  * Used by event-buffer.ts when LRU cleanup is performed
  */
-export function recordCacheCleanup(removedCount: number): void {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function recordCacheCleanup(_removedCount: number): void {
 	try {
 		metrics.bufferCacheCleanup?.inc({})
 	} catch {

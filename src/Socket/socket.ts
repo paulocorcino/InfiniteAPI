@@ -310,7 +310,6 @@ export const makeSocket = (config: SocketConfig) => {
 			}
 		}
 	}
-			// eslint-disable-next-line @typescript-eslint/no-floating-promises
 
 	/** send a query, and wait for its response. auto-generates message ID if not provided */
 	const queryInternal = async (node: BinaryNode, timeoutMs?: number) => {
@@ -601,7 +600,6 @@ export const makeSocket = (config: SocketConfig) => {
 		const keyEnc = noise.processHandshake(handshake, creds.noiseKey)
 
 		let node: proto.IClientPayload
-		// eslint-disable-next-line @typescript-eslint/no-floating-promises
 		if (!creds.me) {
 			node = generateRegistrationNode(creds, config)
 			logger.info({ node }, 'not logged in, attempting registration...')
