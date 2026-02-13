@@ -2,7 +2,7 @@
  * Testes unitários para trace-context.ts
  */
 
-import { beforeEach, describe, expect, it } from '@jest/globals'
+import { beforeEach as beforeEach, describe, expect, it } from '@jest/globals'
 import {
 	addSpanEvent,
 	createPrecisionTimer,

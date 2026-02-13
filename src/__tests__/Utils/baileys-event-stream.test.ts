@@ -200,7 +200,7 @@ describe('BaileysEventStream', () => {
 		})
 
 		it('should remove filter', async () => {
-			const filter = (event: StreamEvent) => false
+			const filter = (_event: StreamEvent) => false
 
 			stream.addFilter(filter)
 			stream.removeFilter(filter)
