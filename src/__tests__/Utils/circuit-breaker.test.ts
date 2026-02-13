@@ -229,7 +229,7 @@ describe('CircuitBreaker', () => {
 			const customBreaker = createCircuitBreaker({
 				name: 'custom',
 				failureThreshold: 1,
-				isFailure: (error) => error.message !== 'Ignored',
+				shouldCountError: (error: any) => error.message !== 'Ignored',
 				collectMetrics: false,
 			})
 

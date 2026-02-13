@@ -164,7 +164,7 @@ describe('processContactAction', () => {
 			expect(contactData[0]!.lid).toBe('111222333@lid')
 
 			const mapping = results.find(r => r.event === 'lid-mapping.update')!.data
-			expect(mapping).toEqual({ lid: '111222333@lid', pn: '5599887766@s.whatsapp.net' })
+			expect(mapping).toEqual([{ lid: '111222333@lid', pn: '5599887766@s.whatsapp.net' }])
 		})
 
 		it('prefers id over pnJid when id is PN user', () => {
@@ -177,7 +177,7 @@ describe('processContactAction', () => {
 			expect(contactData[0]!.phoneNumber).toBe('9999999999@s.whatsapp.net')
 
 			const mapping = results.find(r => r.event === 'lid-mapping.update')!.data
-			expect(mapping.pn).toBe('9999999999@s.whatsapp.net')
+			expect(mapping[0]!.pn).toBe('9999999999@s.whatsapp.net')
 		})
 	})
 })

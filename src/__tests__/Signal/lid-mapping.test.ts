@@ -188,7 +188,7 @@ describe('LIDMappingStore', () => {
 				operationStarted = true
 				await new Promise(resolve => setTimeout(resolve, 100)) // 100ms delay
 				operationCompleted = true
-				return { '12345': 'aaaaa' } as SignalDataTypeMap['lid-mapping']
+				return { '12345': 'aaaaa' } as unknown as SignalDataTypeMap['lid-mapping']
 			})
 
 			// Start operation
