@@ -50,8 +50,8 @@ export const makeSessionCleanup = (
 ) => {
 	let cleanupInterval: ReturnType<typeof setInterval> | null = null
 	let initialTimeout: ReturnType<typeof setTimeout> | null = null
-	let lastCleanupAt: number = 0
-	let cleanupRunning: boolean = false
+	let lastCleanupAt = 0
+	let cleanupRunning = false
 	let startupCleanupPromise: Promise<void> | null = null
 
 	/**
@@ -224,10 +224,7 @@ export const makeSessionCleanup = (
 				? await sessionActivityTracker.getAllActivities()
 				: new Map<string, number>()
 
-			logger.debug(
-				{ trackedActivities: activityMap.size },
-				'Loaded session activity timestamps'
-			)
+			logger.debug({ trackedActivities: activityMap.size }, 'Loaded session activity timestamps')
 
 			// Prepare bulk deletion
 			const sessionsToDelete: string[] = []
@@ -376,11 +373,13 @@ export const makeSessionCleanup = (
 		// Run immediate cleanup on startup if enabled
 		if (config.cleanupOnStartup) {
 			logger.info('🚀 Running cleanup on startup...')
-			startupCleanupPromise = runCleanup().catch(err => {
-				logger.error({ err }, 'Cleanup on startup failed')
-			}).then(() => {
-				startupCleanupPromise = null // Clear after completion
-			})
+			startupCleanupPromise = runCleanup()
+				.catch(err => {
+					logger.error({ err }, 'Cleanup on startup failed')
+				})
+				.then(() => {
+					startupCleanupPromise = null // Clear after completion
+				})
 		}
 
 		// Schedule first cleanup at configured hour

@@ -2,7 +2,7 @@ import NodeCache from '@cacheable/node-cache'
 import { Boom } from '@hapi/boom'
 import { LRUCache } from 'lru-cache'
 import { proto } from '../../WAProto/index.js'
-import { DEFAULT_CACHE_TTLS, DEFAULT_CACHE_MAX_KEYS, PROCESSABLE_HISTORY_TYPES } from '../Defaults'
+import { DEFAULT_CACHE_MAX_KEYS, DEFAULT_CACHE_TTLS, PROCESSABLE_HISTORY_TYPES } from '../Defaults'
 import type {
 	BotListInfo,
 	CacheStore,
@@ -43,7 +43,7 @@ import {
 	newLTHashState,
 	processSyncAction
 } from '../Utils'
-import { makeMutex, makeKeyedMutex } from '../Utils/make-mutex'
+import { makeKeyedMutex, makeMutex } from '../Utils/make-mutex'
 import processMessage from '../Utils/process-message'
 import { buildTcTokenFromJid } from '../Utils/tc-token-utils'
 import {
@@ -70,7 +70,17 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		getMessage
 	} = config
 	const sock = makeSocket(config)
-	const { ev, ws, authState, generateMessageTag, sendNode, query, signalRepository, onUnexpectedError, sendUnifiedSession } = sock
+	const {
+		ev,
+		ws,
+		authState,
+		generateMessageTag,
+		sendNode,
+		query,
+		signalRepository,
+		onUnexpectedError,
+		sendUnifiedSession
+	} = sock
 
 	let privacySettings: { [_: string]: string } | undefined
 
@@ -641,9 +651,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 							// or key not found
 							const isKeyNotFound = error.output?.statusCode === 404
 							const isIrrecoverableError =
-								(attemptsMap[name] || 0) >= MAX_SYNC_ATTEMPTS ||
-								isKeyNotFound ||
-								error.name === 'TypeError'
+								(attemptsMap[name] || 0) >= MAX_SYNC_ATTEMPTS || isKeyNotFound || error.name === 'TypeError'
 							if (isKeyNotFound) {
 								const currentVersion = states[name]?.version ?? 0
 								logger.info(
@@ -656,6 +664,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 									`failed to sync state from version${isIrrecoverableError ? '' : ', removing and trying from scratch'}`
 								)
 							}
+
 							await authState.keys.set({ 'app-state-sync-version': { [name]: null } })
 							// increment number of retries
 							attemptsMap[name] = (attemptsMap[name] || 0) + 1
@@ -765,13 +774,14 @@ export const makeChatsSocket = (config: SocketConfig) => {
 				logger.warn({ toJid }, 'sendPresenceUpdate: failed to decode toJid, skipping')
 				return
 			}
+
 			const { server } = decoded
 			const isLid = server === 'lid'
 
 			await sendNode({
 				tag: 'chatstate',
 				attrs: {
-					from: isLid ? (me.lid || me.id) : me.id,
+					from: isLid ? me.lid || me.id : me.id,
 					to: toJid
 				},
 				content: [
@@ -826,6 +836,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 				logger.warn({ jid }, 'handlePresenceUpdate: firstChild content is empty, skipping')
 				return
 			}
+
 			let type = firstChild.tag as WAPresence
 			if (type === 'paused') {
 				type = 'available'
@@ -1294,7 +1305,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		}, 20_000)
 	})
 
-	ev.on('lid-mapping.update', async (mappings) => {
+	ev.on('lid-mapping.update', async mappings => {
 		try {
 			const result = await signalRepository.lidMapping.storeLIDPNMappings(mappings)
 			logger.debug(
@@ -1319,10 +1330,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 				const pnUser = jidNormalizedUser(mapping.pn)
 
 				if (lidUser && pnUser && lidUser !== pnUser) {
-					logger.debug(
-						{ lid: lidUser, pn: pnUser },
-						'collected chat update for LID→PN merge notification'
-					)
+					logger.debug({ lid: lidUser, pn: pnUser }, 'collected chat update for LID→PN merge notification')
 
 					mergeNotifications.push({
 						id: pnUser,
@@ -1335,10 +1343,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 
 			// Emit single batch of merge notifications for better performance
 			if (mergeNotifications.length > 0) {
-				logger.debug(
-					{ count: mergeNotifications.length },
-					'emitting batch of chat merge notifications'
-				)
+				logger.debug({ count: mergeNotifications.length }, 'emitting batch of chat merge notifications')
 				ev.emit('chats.update', mergeNotifications)
 			}
 

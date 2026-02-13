@@ -13,8 +13,8 @@ import {
 	NOISE_WA_HEADER,
 	UPLOAD_TIMEOUT
 } from '../Defaults'
-import { makeSessionCleanup } from '../Signal/session-cleanup'
 import { makeSessionActivityTracker } from '../Signal/session-activity-tracker'
+import { makeSessionCleanup } from '../Signal/session-cleanup'
 import type { ConnectionState, LIDMapping, SocketConfig } from '../Types'
 import { DisconnectReason } from '../Types'
 import {
@@ -45,6 +45,18 @@ import {
 	createPreKeyCircuitBreaker
 } from '../Utils/circuit-breaker'
 import {
+	decrementActiveConnections,
+	incrementActiveConnections,
+	recordConnectionAttempt,
+	recordConnectionError
+} from '../Utils/prometheus-metrics'
+import {
+	createUnifiedSessionManager,
+	extractServerTime,
+	shouldEnableUnifiedSession,
+	type UnifiedSessionManager
+} from '../Utils/unified-session'
+import {
 	assertNodeErrorFree,
 	type BinaryNode,
 	binaryNodeToString,
@@ -57,18 +69,6 @@ import {
 	jidEncode,
 	S_WHATSAPP_NET
 } from '../WABinary'
-import {
-	recordConnectionError,
-	recordConnectionAttempt,
-	incrementActiveConnections,
-	decrementActiveConnections
-} from '../Utils/prometheus-metrics'
-import {
-	createUnifiedSessionManager,
-	extractServerTime,
-	shouldEnableUnifiedSession,
-	type UnifiedSessionManager
-} from '../Utils/unified-session'
 import { BinaryInfo } from '../WAM/BinaryInfo.js'
 import { USyncQuery, USyncUser } from '../WAUSync/'
 import { WebSocketClient } from './Client'
@@ -103,9 +103,8 @@ export const makeSocket = (config: SocketConfig) => {
 	} = config
 
 	// Resolve enableUnifiedSession: explicit config > env var > default (true)
-	const enableUnifiedSession = enableUnifiedSessionConfig !== undefined
-		? enableUnifiedSessionConfig
-		: shouldEnableUnifiedSession()
+	const enableUnifiedSession =
+		enableUnifiedSessionConfig !== undefined ? enableUnifiedSessionConfig : shouldEnableUnifiedSession()
 
 	// Initialize circuit breakers if enabled
 	let queryCircuitBreaker: CircuitBreaker | undefined
@@ -223,6 +222,7 @@ export const makeSocket = (config: SocketConfig) => {
 				if (error instanceof CircuitOpenError) {
 					logger.warn({ circuitName: error.circuitName }, 'Send blocked by connection circuit breaker')
 				}
+
 				throw error
 			}
 		}
@@ -246,6 +246,7 @@ export const makeSocket = (config: SocketConfig) => {
 		const sendNodeForSession = async (node: BinaryNode): Promise<void> => {
 			await sendNode(node)
 		}
+
 		unifiedSessionManager = createUnifiedSessionManager({
 			enabled: true,
 			logger,
@@ -342,6 +343,7 @@ export const makeSocket = (config: SocketConfig) => {
 				if (error instanceof CircuitOpenError) {
 					logger.warn({ circuitName: error.circuitName, state: error.state }, 'Query blocked by circuit breaker')
 				}
+
 				throw error
 			}
 		}
@@ -572,7 +574,7 @@ export const makeSocket = (config: SocketConfig) => {
 		})
 
 		if (sendMsg) {
-				sendRawMessage(sendMsg).catch(onClose!)
+			sendRawMessage(sendMsg).catch(onClose!)
 		}
 
 		return result
@@ -857,9 +859,10 @@ export const makeSocket = (config: SocketConfig) => {
 			// 1. Multiple calls to cleanup (reentrancy guard)
 			// 2. Timer orphaning: syncLoop creating timer after clearTimeout
 			if (cleanedUp) {
-				return  // Already cleaned up
+				return // Already cleaned up
 			}
-			cleanedUp = true  // ← Set IMMEDIATELY to close race window
+
+			cleanedUp = true // ← Set IMMEDIATELY to close race window
 
 			ev.off('connection.update', connectionHandler)
 			if (syncTimer) {
@@ -957,10 +960,12 @@ export const makeSocket = (config: SocketConfig) => {
 					clearTimeout(ttlTimer)
 					ttlTimer = undefined
 				}
+
 				if (ttlGraceTimer) {
 					clearTimeout(ttlGraceTimer)
 					ttlGraceTimer = undefined
 				}
+
 				sessionStartTime = undefined
 				logger.info('🕐 Session TTL timers cleared on disconnect')
 			}
@@ -979,17 +984,20 @@ export const makeSocket = (config: SocketConfig) => {
 				logger.debug('🕐 Session TTL cleanup already called')
 				return
 			}
-			cleanedUp = true  // ← Set IMMEDIATELY to close race window
+
+			cleanedUp = true // ← Set IMMEDIATELY to close race window
 
 			ev.off('connection.update', connectionHandler)
 			if (ttlTimer) {
 				clearTimeout(ttlTimer)
 				ttlTimer = undefined
 			}
+
 			if (ttlGraceTimer) {
 				clearTimeout(ttlGraceTimer)
 				ttlGraceTimer = undefined
 			}
+
 			logger.debug('🕐 Session TTL cleanup function executed')
 		}
 	}
@@ -1053,7 +1061,8 @@ export const makeSocket = (config: SocketConfig) => {
 			logger.trace({ trace: error?.stack }, 'connection already closed')
 			return
 		}
-		closed = true  // ← Set IMMEDIATELY to close race window
+
+		closed = true // ← Set IMMEDIATELY to close race window
 
 		logger.info({ trace: error?.stack }, error ? 'connection errored' : 'connection closed')
 
@@ -1089,6 +1098,7 @@ export const makeSocket = (config: SocketConfig) => {
 				default:
 					errorType = `error_${statusCode}`
 			}
+
 			recordConnectionError(errorType)
 			recordConnectionAttempt('failure')
 		}
@@ -1115,7 +1125,7 @@ export const makeSocket = (config: SocketConfig) => {
 			try {
 				await Promise.race([
 					uploadPreKeysPromise,
-					new Promise<void>((resolve) => setTimeout(resolve, 5000)) // 5s timeout
+					new Promise<void>(resolve => setTimeout(resolve, 5000)) // 5s timeout
 				])
 				logger.debug('Pending pre-key upload completed or timed out')
 			} catch (error) {
@@ -1138,10 +1148,7 @@ export const makeSocket = (config: SocketConfig) => {
 
 		// Detect socket-level session errors that require recreation
 		const statusCode = (error as Boom)?.output?.statusCode || 0
-		const isSessionError = (
-			statusCode === DisconnectReason.badSession ||
-			statusCode === DisconnectReason.restartRequired
-		)
+		const isSessionError = statusCode === DisconnectReason.badSession || statusCode === DisconnectReason.restartRequired
 
 		if (isSessionError) {
 			logger.warn(

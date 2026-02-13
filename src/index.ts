@@ -8,7 +8,7 @@ const _origConsoleError = console.error
 const _errorTimestamps = new Map<string, number>()
 const DEDUP_WINDOW_MS = 150
 
-console.error = function(...args: unknown[]) {
+console.error = function (...args: unknown[]) {
 	if (args.length > 0 && typeof args[0] === 'string') {
 		const msg = args[0]
 		const stack = new Error().stack || ''
@@ -40,9 +40,7 @@ console.error = function(...args: unknown[]) {
 				const maskedJid = jid && jid.length > 8 ? `${jid.substring(0, 4)}****${jid.substring(jid.length - 4)}` : jid
 
 				// Format clean message
-				const cleanMsg = maskedJid
-					? `${errorType} | JID: ${maskedJid}`
-					: errorType
+				const cleanMsg = maskedJid ? `${errorType} | JID: ${maskedJid}` : errorType
 
 				// Deduplication key: type + ORIGINAL JID (use unmasked to prevent collisions)
 				const dedupeKey = `${errorType}:${jid || 'unknown'}`
@@ -50,7 +48,7 @@ console.error = function(...args: unknown[]) {
 				const lastTime = _errorTimestamps.get(dedupeKey)
 
 				if (lastTime && now - lastTime < DEDUP_WINDOW_MS) {
-					return  // Skip duplicate within 150ms window
+					return // Skip duplicate within 150ms window
 				}
 
 				_errorTimestamps.set(dedupeKey, now)

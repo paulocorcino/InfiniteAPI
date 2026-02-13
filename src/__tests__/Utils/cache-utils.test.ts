@@ -2,14 +2,14 @@
  * Testes unitários para cache-utils.ts
  */
 
-import { describe, it, expect, beforeEach, jest } from '@jest/globals'
+import { beforeEach, describe, expect, it, jest } from '@jest/globals'
 import {
 	Cache,
-	createCache,
-	MultiLevelCache,
-	withCache,
-	getGlobalCache,
 	clearGlobalCaches,
+	createCache,
+	getGlobalCache,
+	MultiLevelCache,
+	withCache
 } from '../../Utils/cache-utils.js'
 
 describe('Cache', () => {
@@ -19,7 +19,7 @@ describe('Cache', () => {
 		cache = createCache<string>({
 			ttl: 1000,
 			maxSize: 100,
-			collectMetrics: false,
+			collectMetrics: false
 		})
 	})
 
@@ -57,13 +57,13 @@ describe('Cache', () => {
 		it('should expire values after TTL', async () => {
 			const shortTtlCache = createCache<string>({
 				ttl: 50,
-				collectMetrics: false,
+				collectMetrics: false
 			})
 
 			shortTtlCache.set('expiring', 'value')
 			expect(shortTtlCache.get('expiring')).toBe('value')
 
-			await new Promise((resolve) => setTimeout(resolve, 100))
+			await new Promise(resolve => setTimeout(resolve, 100))
 
 			expect(shortTtlCache.get('expiring')).toBeUndefined()
 		})
@@ -72,7 +72,7 @@ describe('Cache', () => {
 			cache.set('shortLived', 'value', 50)
 			cache.set('longLived', 'value', 5000)
 
-			await new Promise((resolve) => setTimeout(resolve, 100))
+			await new Promise(resolve => setTimeout(resolve, 100))
 
 			expect(cache.get('shortLived')).toBeUndefined()
 			expect(cache.get('longLived')).toBe('value')
@@ -101,7 +101,7 @@ describe('Cache', () => {
 
 		it('should handle async factories', async () => {
 			const factory = jest.fn(async () => {
-				await new Promise((resolve) => setTimeout(resolve, 10))
+				await new Promise(resolve => setTimeout(resolve, 10))
 				return 'asyncValue'
 			})
 

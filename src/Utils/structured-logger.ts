@@ -38,7 +38,7 @@ export const LOG_LEVEL_VALUES: Record<LogLevel, number> = {
 	warn: 40,
 	error: 50,
 	fatal: 60,
-	silent: 100,
+	silent: 100
 }
 
 /**
@@ -111,7 +111,7 @@ export function loadLoggerConfig(): Partial<StructuredLoggerConfig> {
 			: undefined,
 		enableAsyncQueue: process.env.BAILEYS_LOG_ASYNC === 'true',
 		enableMetrics: process.env.BAILEYS_LOG_METRICS === 'true',
-		includeStackTrace: process.env.BAILEYS_LOG_STACK_TRACE !== 'false',
+		includeStackTrace: process.env.BAILEYS_LOG_STACK_TRACE !== 'false'
 	}
 }
 
@@ -195,7 +195,7 @@ const DEFAULT_REDACT_FIELDS = [
 	'auth',
 	'credentials',
 	'privateKey',
-	'private_key',
+	'private_key'
 ]
 
 // ============================================================================
@@ -224,6 +224,7 @@ class RateLimiter {
 			this.tokens--
 			return true
 		}
+
 		return false
 	}
 
@@ -249,8 +250,8 @@ class RateLimiter {
  * Circuit breaker for external hook protection
  */
 class CircuitBreaker {
-	private failures: number = 0
-	private lastFailure: number = 0
+	private failures = 0
+	private lastFailure = 0
 	private state: 'closed' | 'open' | 'half-open' = 'closed'
 
 	constructor(
@@ -295,6 +296,7 @@ class CircuitBreaker {
 		if (this.state === 'open' && Date.now() - this.lastFailure > this.resetTimeoutMs) {
 			this.state = 'half-open'
 		}
+
 		return this.state
 	}
 
@@ -312,8 +314,8 @@ class CircuitBreaker {
  */
 class AsyncLogQueue {
 	private queue: Array<() => void> = []
-	private processing: boolean = false
-	private destroyed: boolean = false
+	private processing = false
+	private destroyed = false
 
 	enqueue(task: () => void): void {
 		if (this.destroyed) return
@@ -334,11 +336,13 @@ class AsyncLogQueue {
 					// Silently ignore errors
 				}
 			}
+
 			// Yield to event loop periodically
 			if (this.queue.length > 0 && this.queue.length % 10 === 0) {
 				await new Promise(resolve => setImmediate(resolve))
 			}
 		}
+
 		this.processing = false
 	}
 
@@ -388,7 +392,7 @@ export class StructuredLogger implements ILogger {
 	private config: ResolvedLoggerConfig
 	private metrics: LoggerMetrics
 	private childContext: Record<string, unknown> = {}
-	private destroyed: boolean = false
+	private destroyed = false
 	private createdAt: number
 
 	// Buffer for batch writes
@@ -405,8 +409,8 @@ export class StructuredLogger implements ILogger {
 	private asyncQueue: AsyncLogQueue | null = null
 
 	// Performance tracking
-	private totalProcessingTime: number = 0
-	private processedLogs: number = 0
+	private totalProcessingTime = 0
+	private processedLogs = 0
 
 	// Metrics module (lazy loaded)
 	// NOTE: Currently no metrics are recorded to this module - it's loaded but unused
@@ -433,7 +437,7 @@ export class StructuredLogger implements ILogger {
 			enableAsyncQueue: config.enableAsyncQueue ?? envConfig.enableAsyncQueue ?? false,
 			circuitBreakerThreshold: config.circuitBreakerThreshold ?? 5,
 			circuitBreakerResetMs: config.circuitBreakerResetMs ?? 30000,
-			enableMetrics: config.enableMetrics ?? envConfig.enableMetrics ?? false,
+			enableMetrics: config.enableMetrics ?? envConfig.enableMetrics ?? false
 		}
 
 		this.metrics = {
@@ -445,14 +449,14 @@ export class StructuredLogger implements ILogger {
 				warn: 0,
 				error: 0,
 				fatal: 0,
-				silent: 0,
+				silent: 0
 			},
 			errorsCount: 0,
 			droppedLogs: 0,
 			bufferFlushes: 0,
 			hookFailures: 0,
 			circuitBreakerTrips: 0,
-			avgProcessingTimeMs: 0,
+			avgProcessingTimeMs: 0
 		}
 
 		// Initialize rate limiter
@@ -462,10 +466,7 @@ export class StructuredLogger implements ILogger {
 
 		// Initialize circuit breaker for external hook
 		if (this.config.externalHook) {
-			this.circuitBreaker = new CircuitBreaker(
-				this.config.circuitBreakerThreshold,
-				this.config.circuitBreakerResetMs
-			)
+			this.circuitBreaker = new CircuitBreaker(this.config.circuitBreakerThreshold, this.config.circuitBreakerResetMs)
 		}
 
 		// Initialize async queue
@@ -482,12 +483,14 @@ export class StructuredLogger implements ILogger {
 
 		// Load metrics module if enabled (currently unused but loaded for future use)
 		if (this.config.enableMetrics) {
-			import('./prometheus-metrics').then(m => {
-				this.metricsModule = m
-				this.debug('📊 Prometheus metrics loaded for logger')
-			}).catch(() => {
-				// Metrics module not available - silent fail
-			})
+			import('./prometheus-metrics')
+				.then(m => {
+					this.metricsModule = m
+					this.debug('📊 Prometheus metrics loaded for logger')
+				})
+				.catch(() => {
+					// Metrics module not available - silent fail
+				})
 		}
 	}
 
@@ -520,7 +523,7 @@ export class StructuredLogger implements ILogger {
 	child(obj: Record<string, unknown>): StructuredLogger {
 		const childLogger = new StructuredLogger({
 			...this.config,
-			context: { ...this.config.context, ...this.childContext, ...obj },
+			context: { ...this.config.context, ...this.childContext, ...obj }
 		})
 		childLogger.childContext = { ...this.childContext, ...obj }
 		return childLogger
@@ -569,14 +572,16 @@ export class StructuredLogger implements ILogger {
 			// External hook with circuit breaker
 			const externalHook = this.config.externalHook
 			if (externalHook && this.circuitBreaker) {
-				this.circuitBreaker.execute(async () => {
-					await Promise.resolve(externalHook(entry))
-				}).catch(() => {
-					this.metrics.hookFailures++
-					if (this.circuitBreaker?.getState() === 'open') {
-						this.metrics.circuitBreakerTrips++
-					}
-				})
+				this.circuitBreaker
+					.execute(async () => {
+						await Promise.resolve(externalHook(entry))
+					})
+					.catch(() => {
+						this.metrics.hookFailures++
+						if (this.circuitBreaker?.getState() === 'open') {
+							this.metrics.circuitBreakerTrips++
+						}
+					})
 			}
 
 			// Track processing time
@@ -623,10 +628,11 @@ export class StructuredLogger implements ILogger {
 			if (this.config.includeStackTrace && obj.stack) {
 				stack = obj.stack
 			}
+
 			data = {
 				errorName: obj.name,
 				errorMessage: obj.message,
-				...(obj as unknown as Record<string, unknown>),
+				...(obj as unknown as Record<string, unknown>)
 			}
 		} else if (typeof obj === 'object' && obj !== null) {
 			data = this.sanitize(obj as Record<string, unknown>)
@@ -651,7 +657,7 @@ export class StructuredLogger implements ILogger {
 			data,
 			stack,
 			correlationId,
-			durationMs,
+			durationMs
 		}
 	}
 
@@ -664,7 +670,7 @@ export class StructuredLogger implements ILogger {
 		for (const [key, value] of Object.entries(obj)) {
 			const lowerKey = key.toLowerCase()
 
-			if (this.config.redactFields.some((field) => lowerKey.includes(field.toLowerCase()))) {
+			if (this.config.redactFields.some(field => lowerKey.includes(field.toLowerCase()))) {
 				sanitized[key] = '[REDACTED]'
 			} else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
 				sanitized[key] = this.sanitize(value as Record<string, unknown>)
@@ -723,7 +729,7 @@ export class StructuredLogger implements ILogger {
 			entry.name ? `[${entry.name}]` : '',
 			entry.correlationId ? `[${entry.correlationId}]` : '',
 			entry.message,
-			entry.durationMs !== undefined ? `(${entry.durationMs}ms)` : '',
+			entry.durationMs !== undefined ? `(${entry.durationMs}ms)` : ''
 		]
 
 		let text = parts.filter(Boolean).join(' ')
@@ -782,11 +788,7 @@ export class StructuredLogger implements ILogger {
 	/**
 	 * Log operation with duration tracking
 	 */
-	logOperation<T>(
-		operationName: string,
-		operation: () => T | Promise<T>,
-		level: LogLevel = 'info'
-	): T | Promise<T> {
+	logOperation<T>(operationName: string, operation: () => T | Promise<T>, level: LogLevel = 'info'): T | Promise<T> {
 		const startTime = Date.now()
 		const contextLogger = this.child({ operation: operationName })
 
@@ -808,7 +810,7 @@ export class StructuredLogger implements ILogger {
 			const result = operation()
 
 			if (result instanceof Promise) {
-				return result.then(handleResult).catch(handleError) as Promise<T>
+				return result.then(handleResult).catch(handleError)
 			}
 
 			return handleResult(result)
@@ -835,7 +837,7 @@ export class StructuredLogger implements ILogger {
 			circuitBreakerState: this.circuitBreaker?.getState() ?? 'closed',
 			queueSize: this.asyncQueue?.getSize() ?? 0,
 			createdAt: this.createdAt,
-			uptimeMs: Date.now() - this.createdAt,
+			uptimeMs: Date.now() - this.createdAt
 		}
 	}
 
@@ -852,14 +854,14 @@ export class StructuredLogger implements ILogger {
 				warn: 0,
 				error: 0,
 				fatal: 0,
-				silent: 0,
+				silent: 0
 			},
 			errorsCount: 0,
 			droppedLogs: 0,
 			bufferFlushes: 0,
 			hookFailures: 0,
 			circuitBreakerTrips: 0,
-			avgProcessingTimeMs: 0,
+			avgProcessingTimeMs: 0
 		}
 		this.totalProcessingTime = 0
 		this.processedLogs = 0
@@ -902,7 +904,7 @@ export class StructuredLogger implements ILogger {
 export function createStructuredLogger(config: Partial<StructuredLoggerConfig> = {}): StructuredLogger {
 	return new StructuredLogger({
 		level: config.level || 'info',
-		...config,
+		...config
 	})
 }
 
@@ -916,9 +918,10 @@ export function getDefaultLogger(): StructuredLogger {
 		defaultLogger = createStructuredLogger({
 			level: 'info',
 			name: 'baileys',
-			jsonFormat: process.env.NODE_ENV === 'production',
+			jsonFormat: process.env.NODE_ENV === 'production'
 		})
 	}
+
 	return defaultLogger
 }
 
@@ -933,7 +936,7 @@ export function createTimer(): { elapsed: () => number; elapsedMs: () => string 
 	const start = process.hrtime.bigint()
 	return {
 		elapsed: () => Number(process.hrtime.bigint() - start) / 1_000_000,
-		elapsedMs: () => `${(Number(process.hrtime.bigint() - start) / 1_000_000).toFixed(2)}ms`,
+		elapsedMs: () => `${(Number(process.hrtime.bigint() - start) / 1_000_000).toFixed(2)}ms`
 	}
 }
 

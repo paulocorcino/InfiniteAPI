@@ -1,9 +1,9 @@
 import { proto } from '../../../WAProto/index.js'
 import {
-	processHistoryMessage,
 	extractLidPnFromConversation,
 	extractLidPnFromMessage,
-	isPersonJid
+	isPersonJid,
+	processHistoryMessage
 } from '../../Utils/history'
 
 describe('isPersonJid', () => {
@@ -107,23 +107,13 @@ describe('extractLidPnFromMessage', () => {
 
 	describe('edge cases', () => {
 		it('should return undefined when no alt JID is present', () => {
-			const result = extractLidPnFromMessage(
-				'5511999999999@s.whatsapp.net',
-				undefined,
-				undefined,
-				undefined
-			)
+			const result = extractLidPnFromMessage('5511999999999@s.whatsapp.net', undefined, undefined, undefined)
 
 			expect(result).toBeUndefined()
 		})
 
 		it('should return undefined when both are same type (LID)', () => {
-			const result = extractLidPnFromMessage(
-				'123456789012345@lid',
-				'987654321098765@lid',
-				undefined,
-				undefined
-			)
+			const result = extractLidPnFromMessage('123456789012345@lid', '987654321098765@lid', undefined, undefined)
 
 			expect(result).toBeUndefined()
 		})
@@ -140,12 +130,7 @@ describe('extractLidPnFromMessage', () => {
 		})
 
 		it('should return undefined for newsletter messages', () => {
-			const result = extractLidPnFromMessage(
-				'123456789012345@newsletter',
-				undefined,
-				undefined,
-				undefined
-			)
+			const result = extractLidPnFromMessage('123456789012345@newsletter', undefined, undefined, undefined)
 
 			expect(result).toBeUndefined()
 		})
@@ -235,11 +220,7 @@ describe('extractLidPnFromMessage', () => {
 describe('extractLidPnFromConversation', () => {
 	describe('LID chat with pnJid', () => {
 		it('should extract mapping when chat ID is @lid format with pnJid', () => {
-			const result = extractLidPnFromConversation(
-				'123456789012345@lid',
-				undefined,
-				'5511999999999@s.whatsapp.net'
-			)
+			const result = extractLidPnFromConversation('123456789012345@lid', undefined, '5511999999999@s.whatsapp.net')
 
 			expect(result).toEqual({
 				lid: '123456789012345@lid',
@@ -248,11 +229,7 @@ describe('extractLidPnFromConversation', () => {
 		})
 
 		it('should extract mapping when chat ID is @hosted.lid format with pnJid', () => {
-			const result = extractLidPnFromConversation(
-				'123456789012345@hosted.lid',
-				undefined,
-				'5511999999999@hosted'
-			)
+			const result = extractLidPnFromConversation('123456789012345@hosted.lid', undefined, '5511999999999@hosted')
 
 			expect(result).toEqual({
 				lid: '123456789012345@hosted.lid',
@@ -263,11 +240,7 @@ describe('extractLidPnFromConversation', () => {
 
 	describe('PN chat with lidJid', () => {
 		it('should extract mapping when chat ID is @s.whatsapp.net format with lidJid', () => {
-			const result = extractLidPnFromConversation(
-				'5511999999999@s.whatsapp.net',
-				'123456789012345@lid',
-				undefined
-			)
+			const result = extractLidPnFromConversation('5511999999999@s.whatsapp.net', '123456789012345@lid', undefined)
 
 			expect(result).toEqual({
 				lid: '123456789012345@lid',
@@ -276,11 +249,7 @@ describe('extractLidPnFromConversation', () => {
 		})
 
 		it('should extract mapping when chat ID is @hosted format with lidJid', () => {
-			const result = extractLidPnFromConversation(
-				'5511999999999@hosted',
-				'123456789012345@hosted.lid',
-				undefined
-			)
+			const result = extractLidPnFromConversation('5511999999999@hosted', '123456789012345@hosted.lid', undefined)
 
 			expect(result).toEqual({
 				lid: '123456789012345@hosted.lid',
@@ -291,11 +260,7 @@ describe('extractLidPnFromConversation', () => {
 
 	describe('edge cases', () => {
 		it('should return undefined for group chats', () => {
-			const result = extractLidPnFromConversation(
-				'123456789012345@g.us',
-				undefined,
-				undefined
-			)
+			const result = extractLidPnFromConversation('123456789012345@g.us', undefined, undefined)
 
 			expect(result).toBeUndefined()
 		})
@@ -311,41 +276,25 @@ describe('extractLidPnFromConversation', () => {
 		})
 
 		it('should return undefined for broadcast lists (@broadcast)', () => {
-			const result = extractLidPnFromConversation(
-				'status@broadcast',
-				undefined,
-				undefined
-			)
+			const result = extractLidPnFromConversation('status@broadcast', undefined, undefined)
 
 			expect(result).toBeUndefined()
 		})
 
 		it('should return undefined when no alternate JID is available', () => {
-			const result = extractLidPnFromConversation(
-				'123456789012345@lid',
-				undefined,
-				undefined
-			)
+			const result = extractLidPnFromConversation('123456789012345@lid', undefined, undefined)
 
 			expect(result).toBeUndefined()
 		})
 
 		it('should return undefined when both lidJid and pnJid are null', () => {
-			const result = extractLidPnFromConversation(
-				'5511999999999@s.whatsapp.net',
-				null,
-				null
-			)
+			const result = extractLidPnFromConversation('5511999999999@s.whatsapp.net', null, null)
 
 			expect(result).toBeUndefined()
 		})
 
 		it('should return undefined for LID chat with lidJid (no pnJid)', () => {
-			const result = extractLidPnFromConversation(
-				'123456789012345@lid',
-				'987654321098765@lid',
-				undefined
-			)
+			const result = extractLidPnFromConversation('123456789012345@lid', '987654321098765@lid', undefined)
 
 			expect(result).toBeUndefined()
 		})
@@ -507,9 +456,7 @@ describe('processHistoryMessage', () => {
 
 			const result = processHistoryMessage(historySync)
 
-			expect(result.lidPnMappings).toEqual([
-				{ lid: '11111111111111@lid', pn: '5511999999999@s.whatsapp.net' }
-			])
+			expect(result.lidPnMappings).toEqual([{ lid: '11111111111111@lid', pn: '5511999999999@s.whatsapp.net' }])
 		})
 
 		it('should extract LID-PN mapping when chat ID is PN with lidJid', () => {
@@ -526,17 +473,13 @@ describe('processHistoryMessage', () => {
 
 			const result = processHistoryMessage(historySync)
 
-			expect(result.lidPnMappings).toEqual([
-				{ lid: '11111111111111@lid', pn: '5511999999999@s.whatsapp.net' }
-			])
+			expect(result.lidPnMappings).toEqual([{ lid: '11111111111111@lid', pn: '5511999999999@s.whatsapp.net' }])
 		})
 
 		it('should deduplicate mappings from both sources', () => {
 			const historySync: proto.IHistorySync = {
 				syncType: proto.HistorySync.HistorySyncType.INITIAL_BOOTSTRAP,
-				phoneNumberToLidMappings: [
-					{ lidJid: '11111111111111@lid', pnJid: '5511999999999@s.whatsapp.net' }
-				],
+				phoneNumberToLidMappings: [{ lidJid: '11111111111111@lid', pnJid: '5511999999999@s.whatsapp.net' }],
 				conversations: [
 					{
 						id: '11111111111111@lid',
@@ -558,9 +501,7 @@ describe('processHistoryMessage', () => {
 		it('should combine mappings from both sources', () => {
 			const historySync: proto.IHistorySync = {
 				syncType: proto.HistorySync.HistorySyncType.INITIAL_BOOTSTRAP,
-				phoneNumberToLidMappings: [
-					{ lidJid: '11111111111111@lid', pnJid: '5511999999999@s.whatsapp.net' }
-				],
+				phoneNumberToLidMappings: [{ lidJid: '11111111111111@lid', pnJid: '5511999999999@s.whatsapp.net' }],
 				conversations: [
 					{
 						id: '22222222222222@lid',
@@ -613,9 +554,7 @@ describe('processHistoryMessage', () => {
 
 			const result = processHistoryMessage(historySync)
 
-			expect(result.lidPnMappings).toEqual([
-				{ lid: '11111111111111@hosted.lid', pn: '5511999999999@hosted' }
-			])
+			expect(result.lidPnMappings).toEqual([{ lid: '11111111111111@hosted.lid', pn: '5511999999999@hosted' }])
 		})
 
 		it('should extract mappings for all conversation sync types', () => {
@@ -639,28 +578,20 @@ describe('processHistoryMessage', () => {
 
 				const result = processHistoryMessage(historySync)
 
-				expect(result.lidPnMappings).toEqual([
-					{ lid: '11111111111111@lid', pn: '5511999999999@s.whatsapp.net' }
-				])
+				expect(result.lidPnMappings).toEqual([{ lid: '11111111111111@lid', pn: '5511999999999@s.whatsapp.net' }])
 			}
 		})
 
 		it('should not extract conversation mappings for PUSH_NAME sync type', () => {
 			const historySync: proto.IHistorySync = {
 				syncType: proto.HistorySync.HistorySyncType.PUSH_NAME,
-				pushnames: [
-					{ id: '5511999999999@s.whatsapp.net', pushname: 'User Name' }
-				],
-				phoneNumberToLidMappings: [
-					{ lidJid: '11111111111111@lid', pnJid: '5511999999999@s.whatsapp.net' }
-				]
+				pushnames: [{ id: '5511999999999@s.whatsapp.net', pushname: 'User Name' }],
+				phoneNumberToLidMappings: [{ lidJid: '11111111111111@lid', pnJid: '5511999999999@s.whatsapp.net' }]
 			}
 
 			const result = processHistoryMessage(historySync)
 
-			expect(result.lidPnMappings).toEqual([
-				{ lid: '11111111111111@lid', pn: '5511999999999@s.whatsapp.net' }
-			])
+			expect(result.lidPnMappings).toEqual([{ lid: '11111111111111@lid', pn: '5511999999999@s.whatsapp.net' }])
 		})
 
 		it('should not extract mapping from newsletter conversations', () => {
@@ -765,9 +696,7 @@ describe('processHistoryMessage', () => {
 		it('should deduplicate mappings from all three sources', () => {
 			const historySync = {
 				syncType: proto.HistorySync.HistorySyncType.INITIAL_BOOTSTRAP,
-				phoneNumberToLidMappings: [
-					{ lidJid: '11111111111111@lid', pnJid: '5511999999999@s.whatsapp.net' }
-				],
+				phoneNumberToLidMappings: [{ lidJid: '11111111111111@lid', pnJid: '5511999999999@s.whatsapp.net' }],
 				conversations: [
 					{
 						id: '11111111111111@lid',

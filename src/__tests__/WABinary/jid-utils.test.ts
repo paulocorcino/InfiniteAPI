@@ -1,5 +1,12 @@
 import { describe, expect, it } from '@jest/globals'
-import { isAnyLidUser, isAnyPnUser, isHostedLidUser, isHostedPnUser, isLidUser, isPnUser } from '../../WABinary/jid-utils'
+import {
+	isAnyLidUser,
+	isAnyPnUser,
+	isHostedLidUser,
+	isHostedPnUser,
+	isLidUser,
+	isPnUser
+} from '../../WABinary/jid-utils'
 
 describe('JID Utility Functions', () => {
 	describe('isAnyLidUser', () => {

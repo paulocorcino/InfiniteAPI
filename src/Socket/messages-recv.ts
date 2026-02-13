@@ -3,8 +3,14 @@ import { Boom } from '@hapi/boom'
 import { randomBytes } from 'crypto'
 import Long from 'long'
 import { proto } from '../../WAProto/index.js'
-import { DEFAULT_CACHE_TTLS, DEFAULT_SESSION_CLEANUP_CONFIG, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT, PLACEHOLDER_MAX_AGE_SECONDS, STATUS_EXPIRY_SECONDS } from '../Defaults'
-import { metrics, recordMessageReceived, recordHistorySyncMessages, recordMessageRetry, recordMessageFailure } from '../Utils/prometheus-metrics.js'
+import {
+	DEFAULT_CACHE_TTLS,
+	DEFAULT_SESSION_CLEANUP_CONFIG,
+	KEY_BUNDLE_TYPE,
+	MIN_PREKEY_COUNT,
+	PLACEHOLDER_MAX_AGE_SECONDS,
+	STATUS_EXPIRY_SECONDS
+} from '../Defaults'
 import type {
 	GroupParticipant,
 	MessageReceiptType,
@@ -18,12 +24,10 @@ import type {
 	WAPatchName
 } from '../Types'
 import { WAMessageStatus, WAMessageStubType } from '../Types'
-import { logMessageReceived } from '../Utils/baileys-logger'
 import {
 	aesDecryptCTR,
 	aesEncryptGCM,
 	cleanMessage,
-	normalizeMessageJids,
 	Curve,
 	decodeMediaRetryNode,
 	decodeMessageNode,
@@ -42,12 +46,21 @@ import {
 	MISSING_KEYS_ERROR_TEXT,
 	NACK_REASONS,
 	NO_MESSAGE_FOUND_ERROR_TEXT,
+	normalizeMessageJids,
 	toNumber,
 	unixTimestampSeconds,
 	xmppPreKey,
 	xmppSignedPreKey
 } from '../Utils'
+import { logMessageReceived } from '../Utils/baileys-logger'
 import { makeMutex } from '../Utils/make-mutex'
+import {
+	metrics,
+	recordHistorySyncMessages,
+	recordMessageFailure,
+	recordMessageReceived,
+	recordMessageRetry
+} from '../Utils/prometheus-metrics.js'
 import {
 	areJidsSameUser,
 	type BinaryNode,
@@ -81,7 +94,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		sessionCleanupConfig
 	} = config
 	// Use nullish coalescing to handle partial config properly
-	const autoCleanCorrupted = sessionCleanupConfig?.autoCleanCorrupted ?? DEFAULT_SESSION_CLEANUP_CONFIG.autoCleanCorrupted
+	const autoCleanCorrupted =
+		sessionCleanupConfig?.autoCleanCorrupted ?? DEFAULT_SESSION_CLEANUP_CONFIG.autoCleanCorrupted
 	const sock = makeMessagesSocket(config)
 	const {
 		ev,
@@ -488,7 +502,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 				// Extract error code from retry node if present (for MAC error detection)
 				const retryNode = getBinaryNodeChild(node, 'retry')
-				const errorAttr = retryNode?.attrs?.error as string | undefined
+				const errorAttr = retryNode?.attrs?.error
 				const errorCode = messageRetryManager.parseRetryErrorCode(errorAttr)
 
 				const result = messageRetryManager.shouldRecreateSession(fromJid, hasSession.exists, errorCode)
@@ -1060,7 +1074,10 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				recreateReason = result.reason
 
 				if (shouldRecreateSession) {
-					logger.debug({ participant, retryCount, reason: recreateReason, errorCode }, 'recreating session for outgoing retry')
+					logger.debug(
+						{ participant, retryCount, reason: recreateReason, errorCode },
+						'recreating session for outgoing retry'
+					)
 					// CRITICAL: Use same transaction key as encrypt/decrypt operations to prevent race
 					// Using meId ensures this delete serializes with sendMessage() and other session operations
 					await authState.keys.transaction(async () => {
@@ -1255,7 +1272,14 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			category,
 			author,
 			decrypt
-		} = decryptMessageNode(node, authState.creds.me!.id, authState.creds.me!.lid || '', signalRepository, logger, autoCleanCorrupted)
+		} = decryptMessageNode(
+			node,
+			authState.creds.me!.id,
+			authState.creds.me!.lid || '',
+			signalRepository,
+			logger,
+			autoCleanCorrupted
+		)
 
 		const alt = msg.key.participantAlt || msg.key.remoteJidAlt
 		// Handle LID/PN mappings with hybrid approach:
@@ -1271,7 +1295,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				const existingMapping = await signalRepository.lidMapping.getPNForLID(alt)
 				if (!existingMapping) {
 					// Store mapping in background (non-critical, doesn't block decrypt)
-					signalRepository.lidMapping.storeLIDPNMappings([{ lid: alt, pn: primaryJid }])
+					signalRepository.lidMapping
+						.storeLIDPNMappings([{ lid: alt, pn: primaryJid }])
 						.catch(error => logger.warn({ error, alt, primaryJid }, 'Background LID mapping storage failed'))
 				}
 
@@ -1286,7 +1311,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				const existingMapping = await signalRepository.lidMapping.getLIDForPN(alt)
 				if (!existingMapping) {
 					// Store mapping in background (non-critical)
-					signalRepository.lidMapping.storeLIDPNMappings([{ lid: primaryJid, pn: alt }])
+					signalRepository.lidMapping
+						.storeLIDPNMappings([{ lid: primaryJid, pn: alt }])
 						.catch(error => logger.warn({ error, alt, primaryJid }, 'Background LID mapping storage failed'))
 				}
 
@@ -1320,7 +1346,10 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			// Fallback chain: remoteJid (normalized) > msg.key.id (unique) > 'unknown' (serializes all)
 			let mutexKey = msg.key.remoteJid
 			if (!mutexKey) {
-				logger.warn({ msgId: msg.key.id, fromMe: msg.key.fromMe }, 'Missing remoteJid after normalization, using msg.key.id as fallback')
+				logger.warn(
+					{ msgId: msg.key.id, fromMe: msg.key.fromMe },
+					'Missing remoteJid after normalization, using msg.key.id as fallback'
+				)
 				mutexKey = msg.key.id || 'unknown'
 			}
 
@@ -1341,9 +1370,11 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 						// Skip unavailable fanout types - these messages will never have content available
 						// These are system messages that cannot be decrypted or retrieved
 						const messageType = msg.messageStubParameters?.[2]
-						if (messageType === 'bot_unavailable_fanout' ||
+						if (
+							messageType === 'bot_unavailable_fanout' ||
 							messageType === 'hosted_unavailable_fanout' ||
-							messageType === 'view_once_unavailable_fanout') {
+							messageType === 'view_once_unavailable_fanout'
+						) {
 							logger.debug(
 								{ msgId: msg.key?.id, messageType },
 								'CTWA: Skipping placeholder resend for unavailable fanout type'
@@ -1395,34 +1426,22 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 									try {
 										const requestId = await requestPlaceholderResend(msgKey, msgData)
 										if (requestId && requestId !== 'RESOLVED') {
-											logger.debug(
-												{ msgId, requestId },
-												'CTWA: Placeholder resend request sent successfully'
-											)
+											logger.debug({ msgId, requestId }, 'CTWA: Placeholder resend request sent successfully')
 											metrics.ctwaRecoveryRequests.inc({ status: 'sent' })
 											// Note: The actual message will be emitted via 'messages.upsert'
 											// when the PEER_DATA_OPERATION_REQUEST_RESPONSE_MESSAGE is processed
 											// in the PDO response handler in src/Utils/process-message.ts
 										} else if (requestId === 'RESOLVED') {
 											// Message was received while we were waiting
-											logger.debug(
-												{ msgId },
-												'CTWA: Message received during resend delay'
-											)
+											logger.debug({ msgId }, 'CTWA: Message received during resend delay')
 											metrics.ctwaMessagesRecovered.inc()
 											metrics.ctwaRecoveryLatency.observe(Date.now() - startTime)
 										} else {
 											// Already requested (duplicate request prevented by cache)
-											logger.debug(
-												{ msgId },
-												'CTWA: Resend already requested, skipping duplicate'
-											)
+											logger.debug({ msgId }, 'CTWA: Resend already requested, skipping duplicate')
 										}
 									} catch (error) {
-										logger.warn(
-											{ error, msgId },
-											'CTWA: Failed to request placeholder resend'
-										)
+										logger.warn({ error, msgId }, 'CTWA: Failed to request placeholder resend')
 										metrics.ctwaRecoveryFailures.inc({ reason: 'request_failed' })
 									}
 								})
@@ -1433,24 +1452,15 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 								try {
 									const requestId = await requestPlaceholderResend(msgKey, msgData)
 									if (requestId && requestId !== 'RESOLVED') {
-										logger.debug(
-											{ msgId, requestId },
-											'CTWA: Placeholder resend request sent successfully (direct)'
-										)
+										logger.debug({ msgId, requestId }, 'CTWA: Placeholder resend request sent successfully (direct)')
 									} else if (requestId === 'RESOLVED') {
 										// Message arrived during the internal 2s delay in requestPlaceholderResend
-										logger.debug(
-											{ msgId },
-											'CTWA: Message received before direct resend request completed'
-										)
+										logger.debug({ msgId }, 'CTWA: Message received before direct resend request completed')
 										metrics.ctwaMessagesRecovered.inc()
 										metrics.ctwaRecoveryLatency.observe(Date.now() - startTime)
 									} else {
 										// Already requested (duplicate request prevented by cache)
-										logger.debug(
-											{ msgId },
-											'CTWA: Resend already requested, skipping duplicate (direct)'
-										)
+										logger.debug({ msgId }, 'CTWA: Resend already requested, skipping duplicate (direct)')
 									}
 								} catch (error) {
 									logger.warn({ error, msgId }, 'CTWA: Failed to request placeholder resend')
@@ -1575,14 +1585,21 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 				// Record message received metric
 				const msgContent = msg.message
-				const msgType = msgContent?.conversation ? 'text'
-					: msgContent?.imageMessage ? 'image'
-					: msgContent?.videoMessage ? 'video'
-					: msgContent?.audioMessage ? 'audio'
-					: msgContent?.documentMessage ? 'document'
-					: msgContent?.stickerMessage ? 'sticker'
-					: msgContent?.reactionMessage ? 'reaction'
-					: 'other'
+				const msgType = msgContent?.conversation
+					? 'text'
+					: msgContent?.imageMessage
+						? 'image'
+						: msgContent?.videoMessage
+							? 'video'
+							: msgContent?.audioMessage
+								? 'audio'
+								: msgContent?.documentMessage
+									? 'document'
+									: msgContent?.stickerMessage
+										? 'sticker'
+										: msgContent?.reactionMessage
+											? 'reaction'
+											: 'other'
 				recordMessageReceived(msgType)
 
 				// Track session activity for cleanup

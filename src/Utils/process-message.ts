@@ -18,7 +18,6 @@ import type {
 	WAMessage,
 	WAMessageKey
 } from '../Types'
-import { metrics, recordHistorySyncMessages } from './prometheus-metrics.js'
 import { WAMessageStubType } from '../Types'
 import { getContentType, normalizeMessageContent } from '../Utils/messages'
 import {
@@ -36,6 +35,7 @@ import { aesDecryptGCM, hmacSign } from './crypto'
 import { getKeyAuthor, toNumber } from './generics'
 import { downloadAndProcessHistorySyncNotification } from './history'
 import type { ILogger } from './logger'
+import { metrics, recordHistorySyncMessages } from './prometheus-metrics.js'
 
 type ProcessMessageContext = {
 	shouldProcessHistoryMsg: boolean
@@ -102,8 +102,8 @@ export const cleanMessage = (message: WAMessage, meId: string, meLid: string) =>
 			// if the sender believed the message being reacted to is not from them
 			// we've to correct the key to be from them, or some other participant
 			msgKey.fromMe = !msgKey.fromMe
-				? areJidsSameUser(msgKey.participant || (msgKey.remoteJid!), meId) ||
-					areJidsSameUser(msgKey.participant || (msgKey.remoteJid!), meLid)
+				? areJidsSameUser(msgKey.participant || msgKey.remoteJid!, meId) ||
+					areJidsSameUser(msgKey.participant || msgKey.remoteJid!, meLid)
 				: // if the message being reacted to, was from them
 					// fromMe automatically becomes false
 					false
@@ -133,6 +133,7 @@ export const normalizeMessageJids = async (
 			} else {
 				logger?.debug({ lid: jid }, 'PN not found for inbound LID, keeping LID')
 			}
+
 			return pn || jid
 		}
 
@@ -160,9 +161,7 @@ export const isRealMessage = (message: WAMessage) => {
 	const hasSomeContent = !!getContentType(normalizedContent)
 	const stubType = message.messageStubType ?? 0
 	return (
-		(!!normalizedContent ||
-			REAL_MSG_STUB_TYPES.has(stubType) ||
-			REAL_MSG_REQ_ME_STUB_TYPES.has(stubType)) &&
+		(!!normalizedContent || REAL_MSG_STUB_TYPES.has(stubType) || REAL_MSG_REQ_ME_STUB_TYPES.has(stubType)) &&
 		hasSomeContent &&
 		!normalizedContent?.protocolMessage &&
 		!normalizedContent?.reactionMessage &&
@@ -326,6 +325,7 @@ const processMessage = async (
 				if (!histNotification) {
 					break
 				}
+
 				const process = shouldProcessHistoryMsg
 				const isLatest = !creds.processedHistoryMessages?.length
 
@@ -363,10 +363,7 @@ const processMessage = async (
 								'stored LID-PN mappings from history sync'
 							)
 							if (result.stored > 0) {
-								logger?.info(
-									{ stored: result.stored },
-									'fallback LID mappings are now available from history sync'
-								)
+								logger?.info({ stored: result.stored }, 'fallback LID mappings are now available from history sync')
 							}
 						} catch (error) {
 							logger?.warn({ error }, 'Failed to store LID-PN mappings from history sync')
@@ -476,10 +473,7 @@ const processMessage = async (
 								// Preserve pushName if not present in PDO response
 								if (cachedData.pushName && !webMessageInfo.pushName) {
 									webMessageInfo.pushName = cachedData.pushName
-									logger?.debug(
-										{ msgId: webMessageInfo.key?.id },
-										'CTWA: Restored pushName from cached metadata'
-									)
+									logger?.debug({ msgId: webMessageInfo.key?.id }, 'CTWA: Restored pushName from cached metadata')
 								}
 
 								// Preserve participantAlt (LID) if not present in PDO response
@@ -498,10 +492,7 @@ const processMessage = async (
 								// Preserve original participant if not in PDO response
 								if (cachedData.participant && webMessageInfo.key && !webMessageInfo.key.participant) {
 									webMessageInfo.key.participant = cachedData.participant
-									logger?.debug(
-										{ msgId: webMessageInfo.key?.id },
-										'CTWA: Restored participant from cached metadata'
-									)
+									logger?.debug({ msgId: webMessageInfo.key?.id }, 'CTWA: Restored participant from cached metadata')
 								}
 
 								// Only use cached timestamp if PDO response doesn't have one
@@ -630,7 +621,7 @@ const processMessage = async (
 				const meIdNormalised = jidNormalizedUser(meId)
 
 				// all jids need to be PN
-				const eventCreatorKey = creationMsgKey.participant || (creationMsgKey.remoteJid!)
+				const eventCreatorKey = creationMsgKey.participant || creationMsgKey.remoteJid!
 				const eventCreatorPn = isLidUser(eventCreatorKey)
 					? await signalRepository.lidMapping.getPNForLID(eventCreatorKey)
 					: eventCreatorKey

@@ -19,13 +19,13 @@ import {
 	type MessageLabelAssociation
 } from '../Types/LabelAssociation'
 import { type BinaryNode, getBinaryNodeChild, getBinaryNodeChildren, isJidGroup, jidNormalizedUser } from '../WABinary'
-import { expandAppStateKeys } from './wasm-bridge'
 import { aesDecrypt, aesEncrypt, hmacSign } from './crypto'
 import { toNumber } from './generics'
 import type { ILogger } from './logger'
 import { LT_HASH_ANTI_TAMPERING } from './lt-hash'
 import { downloadContentFromMessage } from './messages-media'
 import { emitSyncActionResults, processContactAction } from './sync-action-utils'
+import { expandAppStateKeys } from './wasm-bridge'
 
 type FetchAppStateSyncKey = (keyId: string) => Promise<proto.Message.IAppStateSyncKeyData | null | undefined>
 
@@ -350,13 +350,7 @@ export const decodeSyncdPatch = async (
 			throw new Boom('Missing patchMac in patch message', { statusCode: 500 })
 		}
 
-		const patchMac = generatePatchMac(
-			msgSnapshotMac,
-			mutationmacs,
-			toNumber(msgVersion),
-			name,
-			mainKey.patchMacKey
-		)
+		const patchMac = generatePatchMac(msgSnapshotMac, mutationmacs, toNumber(msgVersion), name, mainKey.patchMacKey)
 		if (Buffer.compare(patchMac, msgPatchMac) !== 0) {
 			throw new Boom('Invalid patch mac')
 		}

@@ -14,14 +14,10 @@
  * @see https://github.com/WhiskeySockets/Baileys/pull/2294
  */
 
-import { metrics } from './prometheus-metrics.js'
-import type { ILogger } from './logger.js'
 import type { BinaryNode } from '../WABinary/types.js'
-import {
-	CircuitBreaker,
-	CircuitOpenError,
-	createConnectionCircuitBreaker
-} from './circuit-breaker.js'
+import { CircuitBreaker, CircuitOpenError, createConnectionCircuitBreaker } from './circuit-breaker.js'
+import type { ILogger } from './logger.js'
+import { metrics } from './prometheus-metrics.js'
 
 // ============================================
 // Time Constants (Enterprise-grade)
@@ -41,7 +37,7 @@ const TimeMs = {
 	/** One day in milliseconds */
 	Day: 86_400_000,
 	/** One week in milliseconds */
-	Week: 604_800_000,
+	Week: 604_800_000
 } as const
 
 /**
@@ -133,11 +129,13 @@ export class UnifiedSessionManager {
 	constructor(options: UnifiedSessionOptions = {}) {
 		this.options = {
 			enabled: options.enabled ?? true,
-			logger: options.logger ?? console as unknown as ILogger,
+			logger: options.logger ?? (console as unknown as ILogger),
 			enableCircuitBreaker: options.enableCircuitBreaker ?? true,
-			sendNode: options.sendNode ?? (async () => {
-				throw new Error('sendNode function not configured')
-			})
+			sendNode:
+				options.sendNode ??
+				(async () => {
+					throw new Error('sendNode function not configured')
+				})
 		}
 
 		// Initialize circuit breaker if enabled
@@ -177,15 +175,10 @@ export class UnifiedSessionManager {
 			return
 		}
 
-		const serverTimeNum = typeof serverTime === 'string'
-			? parseInt(serverTime, 10)
-			: serverTime
+		const serverTimeNum = typeof serverTime === 'string' ? parseInt(serverTime, 10) : serverTime
 
 		if (isNaN(serverTimeNum) || serverTimeNum <= 0) {
-			this.options.logger.debug?.(
-				{ serverTime },
-				'Invalid server time received, ignoring'
-			)
+			this.options.logger.debug?.({ serverTime }, 'Invalid server time received, ignoring')
 			return
 		}
 
@@ -199,10 +192,7 @@ export class UnifiedSessionManager {
 			const oldOffset = this.state.serverTimeOffset
 			this.state.serverTimeOffset = newOffset
 
-			this.options.logger.debug?.(
-				{ oldOffset, newOffset, serverTime: serverTimeNum },
-				'Server time offset updated'
-			)
+			this.options.logger.debug?.({ oldOffset, newOffset, serverTime: serverTimeNum }, 'Server time offset updated')
 
 			// Record metric
 			metrics.socketEvents?.inc({ event: 'server_time_sync' })
@@ -268,10 +258,12 @@ export class UnifiedSessionManager {
 		const node: BinaryNode = {
 			tag: 'ib',
 			attrs: {},
-			content: [{
-				tag: 'unified_session',
-				attrs: { id: sessionId }
-			}]
+			content: [
+				{
+					tag: 'unified_session',
+					attrs: { id: sessionId }
+				}
+			]
 		}
 
 		const sendOperation = async (): Promise<void> => {
@@ -303,15 +295,9 @@ export class UnifiedSessionManager {
 			const errorMessage = error instanceof Error ? error.message : String(error)
 
 			if (error instanceof CircuitOpenError) {
-				this.options.logger.warn?.(
-					{ trigger, circuitState: error.state },
-					'Unified session blocked by circuit breaker'
-				)
+				this.options.logger.warn?.({ trigger, circuitState: error.state }, 'Unified session blocked by circuit breaker')
 			} else {
-				this.options.logger.warn?.(
-					{ trigger, error: errorMessage },
-					'Failed to send unified session telemetry'
-				)
+				this.options.logger.warn?.({ trigger, error: errorMessage }, 'Failed to send unified session telemetry')
 			}
 
 			// Record failure metric
@@ -371,9 +357,7 @@ export class UnifiedSessionManager {
  * })
  * ```
  */
-export function createUnifiedSessionManager(
-	options: UnifiedSessionOptions = {}
-): UnifiedSessionManager {
+export function createUnifiedSessionManager(options: UnifiedSessionOptions = {}): UnifiedSessionManager {
 	return new UnifiedSessionManager(options)
 }
 
@@ -394,11 +378,8 @@ export function extractServerTime(node: BinaryNode): number | undefined {
 		return undefined
 	}
 
-	const parsed = typeof timeAttr === 'string'
-		? parseInt(timeAttr, 10)
-		: typeof timeAttr === 'number'
-			? timeAttr
-			: undefined
+	const parsed =
+		typeof timeAttr === 'string' ? parseInt(timeAttr, 10) : typeof timeAttr === 'number' ? timeAttr : undefined
 
 	if (parsed === undefined || isNaN(parsed) || parsed <= 0) {
 		return undefined
@@ -418,6 +399,7 @@ export function shouldEnableUnifiedSession(): boolean {
 	if (envValue !== undefined) {
 		return envValue.toLowerCase() === 'true' || envValue === '1'
 	}
+
 	// Default: enabled
 	return true
 }

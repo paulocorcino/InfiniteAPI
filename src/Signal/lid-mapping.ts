@@ -151,14 +151,14 @@ export class LIDMappingStore {
 	private readonly keys: SignalKeyStoreWithTransaction
 	private readonly logger: ILogger
 	private readonly config: LIDMappingConfig
-	private destroyed: boolean = false
+	private destroyed = false
 
 	/**
 	 * Operation counter for safe resource cleanup
 	 * Tracks number of operations currently in progress to prevent UAF in destroy()
 	 * Incremented at operation start, decremented at operation end
 	 */
-	private operationsInProgress: number = 0
+	private operationsInProgress = 0
 
 	private pnToLIDFunc?: (jids: string[]) => Promise<LIDMapping[] | undefined>
 
@@ -334,138 +334,140 @@ export class LIDMappingStore {
 			this.stats.totalOperations++
 			this.stats.lastOperationAt = Date.now()
 
-		const result = { stored: 0, skipped: 0, errors: 0 }
+			const result = { stored: 0, skipped: 0, errors: 0 }
 
-		// Phase 1: Validate and collect cache misses
-		const cacheMissPnUsers: string[] = []
-		const pendingValidation = new Map<string, { pnUser: string; lidUser: string }>()
+			// Phase 1: Validate and collect cache misses
+			const cacheMissPnUsers: string[] = []
+			const pendingValidation = new Map<string, { pnUser: string; lidUser: string }>()
 
-		for (const { lid, pn } of pairs) {
-			if (!this.isValidMapping(lid, pn)) {
-				this.logger.warn({ lid, pn }, 'Invalid LID-PN mapping rejected')
-				this.stats.invalidMappings++
-				result.skipped++
-				continue
-			}
-
-			const lidDecoded = jidDecode(lid)
-			const pnDecoded = jidDecode(pn)
-
-			if (!lidDecoded || !pnDecoded) {
-				result.skipped++
-				continue
-			}
-
-			const pnUser = pnDecoded.user
-			const lidUser = lidDecoded.user
-
-			// Check cache first
-			const existingLidUser = this.mappingCache.get(`pn:${pnUser}`)
-
-			if (existingLidUser !== undefined) {
-				// Cache hit
-				this.stats.cacheHits++
-				if (existingLidUser === lidUser) {
-					if (this.config.debugLogging) {
-						this.logger.debug({ pnUser, lidUser }, 'LID mapping already exists, skipping')
-					}
+			for (const { lid, pn } of pairs) {
+				if (!this.isValidMapping(lid, pn)) {
+					this.logger.warn({ lid, pn }, 'Invalid LID-PN mapping rejected')
+					this.stats.invalidMappings++
 					result.skipped++
+					continue
+				}
+
+				const lidDecoded = jidDecode(lid)
+				const pnDecoded = jidDecode(pn)
+
+				if (!lidDecoded || !pnDecoded) {
+					result.skipped++
+					continue
+				}
+
+				const pnUser = pnDecoded.user
+				const lidUser = lidDecoded.user
+
+				// Check cache first
+				const existingLidUser = this.mappingCache.get(`pn:${pnUser}`)
+
+				if (existingLidUser !== undefined) {
+					// Cache hit
+					this.stats.cacheHits++
+					if (existingLidUser === lidUser) {
+						if (this.config.debugLogging) {
+							this.logger.debug({ pnUser, lidUser }, 'LID mapping already exists, skipping')
+						}
+
+						result.skipped++
+					} else {
+						// Different mapping - will be stored
+						pendingValidation.set(pnUser, { pnUser, lidUser })
+					}
 				} else {
-					// Different mapping - will be stored
+					// Cache miss - queue for batch DB fetch
+					this.stats.cacheMisses++
+					cacheMissPnUsers.push(pnUser)
 					pendingValidation.set(pnUser, { pnUser, lidUser })
 				}
-			} else {
-				// Cache miss - queue for batch DB fetch
-				this.stats.cacheMisses++
-				cacheMissPnUsers.push(pnUser)
-				pendingValidation.set(pnUser, { pnUser, lidUser })
 			}
-		}
 
-		// Phase 2: Batch fetch all cache misses from DB
-		if (cacheMissPnUsers.length > 0) {
-			const batches = this.chunkArray(cacheMissPnUsers, this.config.batchSize)
+			// Phase 2: Batch fetch all cache misses from DB
+			if (cacheMissPnUsers.length > 0) {
+				const batches = this.chunkArray(cacheMissPnUsers, this.config.batchSize)
 
-			for (const batch of batches) {
-				try {
-					const stored = await this.retryOperation(
-						() => this.keys.get('lid-mapping', batch),
-						'batch-get-mappings'
-					)
+				for (const batch of batches) {
+					try {
+						const stored = await this.retryOperation(() => this.keys.get('lid-mapping', batch), 'batch-get-mappings')
 
-					// Update cache and validate against DB
-					for (const pnUser of batch) {
-						const existingLidUser = stored[pnUser]
+						// Update cache and validate against DB
+						for (const pnUser of batch) {
+							const existingLidUser = stored[pnUser]
 
-						if (existingLidUser) {
-							this.stats.dbHits++
-							// Update cache with database value
-							this.mappingCache.set(`pn:${pnUser}`, existingLidUser)
-							this.mappingCache.set(`lid:${existingLidUser}`, pnUser)
+							if (existingLidUser) {
+								this.stats.dbHits++
+								// Update cache with database value
+								this.mappingCache.set(`pn:${pnUser}`, existingLidUser)
+								this.mappingCache.set(`lid:${existingLidUser}`, pnUser)
 
-							// Check if this mapping should be skipped
-							const pending = pendingValidation.get(pnUser)
-							if (pending && existingLidUser === pending.lidUser) {
-								if (this.config.debugLogging) {
-									this.logger.debug(
-										{ pnUser, lidUser: pending.lidUser },
-										'LID mapping already exists in DB, skipping'
-									)
+								// Check if this mapping should be skipped
+								const pending = pendingValidation.get(pnUser)
+								if (existingLidUser === pending?.lidUser) {
+									if (this.config.debugLogging) {
+										this.logger.debug(
+											{ pnUser, lidUser: pending.lidUser },
+											'LID mapping already exists in DB, skipping'
+										)
+									}
+
+									result.skipped++
+									pendingValidation.delete(pnUser)
 								}
-								result.skipped++
-								pendingValidation.delete(pnUser)
+							} else {
+								this.stats.dbMisses++
 							}
-						} else {
-							this.stats.dbMisses++
 						}
-					}
-				} catch (error) {
-					this.logger.error({ error, batchSize: batch.length }, 'Failed to batch fetch existing mappings')
-					result.errors += batch.length
-					// Remove failed fetches from pending validation to avoid storing them
-					for (const pnUser of batch) {
-						pendingValidation.delete(pnUser)
+					} catch (error) {
+						this.logger.error({ error, batchSize: batch.length }, 'Failed to batch fetch existing mappings')
+						result.errors += batch.length
+						// Remove failed fetches from pending validation to avoid storing them
+						for (const pnUser of batch) {
+							pendingValidation.delete(pnUser)
+						}
 					}
 				}
 			}
-		}
 
-		// Phase 3: Store new/updated mappings
-		const validPairs = Array.from(pendingValidation.values())
+			// Phase 3: Store new/updated mappings
+			const validPairs = Array.from(pendingValidation.values())
 
-		if (validPairs.length === 0) {
-			return result
-		}
-
-		const storeBatches = this.chunkArray(validPairs, this.config.batchSize)
-
-		for (const batch of storeBatches) {
-			try {
-				await this.retryOperation(async () => {
-					await this.keys.transaction(async () => {
-						for (const { pnUser, lidUser } of batch) {
-							await this.keys.set({
-								'lid-mapping': {
-									[pnUser]: lidUser,
-									[`${lidUser}_reverse`]: pnUser
-								}
-							})
-
-							this.mappingCache.set(`pn:${pnUser}`, lidUser)
-							this.mappingCache.set(`lid:${lidUser}`, pnUser)
-							result.stored++
-							this.stats.mappingsStored++
-						}
-					}, 'lid-mapping')
-				}, 'store-mappings')
-			} catch (error) {
-				this.logger.error({ error, batchSize: batch.length }, 'Failed to store mapping batch')
-				result.errors += batch.length
-				this.stats.failedOperations++
+			if (validPairs.length === 0) {
+				return result
 			}
-		}
 
-			this.logger.trace({ result, totalPairs: pairs.length, cacheMisses: cacheMissPnUsers.length }, 'Stored LID-PN mappings with batch optimization')
+			const storeBatches = this.chunkArray(validPairs, this.config.batchSize)
+
+			for (const batch of storeBatches) {
+				try {
+					await this.retryOperation(async () => {
+						await this.keys.transaction(async () => {
+							for (const { pnUser, lidUser } of batch) {
+								await this.keys.set({
+									'lid-mapping': {
+										[pnUser]: lidUser,
+										[`${lidUser}_reverse`]: pnUser
+									}
+								})
+
+								this.mappingCache.set(`pn:${pnUser}`, lidUser)
+								this.mappingCache.set(`lid:${lidUser}`, pnUser)
+								result.stored++
+								this.stats.mappingsStored++
+							}
+						}, 'lid-mapping')
+					}, 'store-mappings')
+				} catch (error) {
+					this.logger.error({ error, batchSize: batch.length }, 'Failed to store mapping batch')
+					result.errors += batch.length
+					this.stats.failedOperations++
+				}
+			}
+
+			this.logger.trace(
+				{ result, totalPairs: pairs.length, cacheMisses: cacheMissPnUsers.length },
+				'Stored LID-PN mappings with batch optimization'
+			)
 			this.recordMetrics('store', result.stored)
 
 			return result
@@ -495,14 +497,10 @@ export class LIDMappingStore {
 
 			// Use request coalescing to deduplicate concurrent lookups
 			// Safe because: wrapped in trackOperation() prevents resource cleanup
-			return this.coalesceRequest(
-				pnUser,
-				this.inflightLIDLookups,
-				async () => {
-					const results = await this.getLIDsForPNs([pn])
-					return results?.[0]?.lid || null
-				}
-			)
+			return this.coalesceRequest(pnUser, this.inflightLIDLookups, async () => {
+				const results = await this.getLIDsForPNs([pn])
+				return results?.[0]?.lid || null
+			})
 		})
 	}
 
@@ -522,139 +520,136 @@ export class LIDMappingStore {
 			this.stats.lastOperationAt = Date.now()
 
 			const usyncFetch: { [_: string]: number[] } = {}
-		const successfulPairs: { [_: string]: LIDMapping } = {}
-		const failedPns = new Set<string>()
-		const pendingByPnUser = new Map<string, Array<{ pn: string; decoded: ReturnType<typeof jidDecode> }>>()
+			const successfulPairs: { [_: string]: LIDMapping } = {}
+			const failedPns = new Set<string>()
+			const pendingByPnUser = new Map<string, Array<{ pn: string; decoded: ReturnType<typeof jidDecode> }>>()
 
-		for (const pn of pns) {
-			if (!isAnyPnUser(pn)) continue
+			for (const pn of pns) {
+				if (!isAnyPnUser(pn)) continue
 
-			const decoded = jidDecode(pn)
-			if (!decoded) continue
+				const decoded = jidDecode(pn)
+				if (!decoded) continue
 
-			const pnUser = decoded.user
-			const cachedLidUser = this.mappingCache.get(`pn:${pnUser}`)
+				const pnUser = decoded.user
+				const cachedLidUser = this.mappingCache.get(`pn:${pnUser}`)
 
-			if (cachedLidUser) {
-				this.stats.cacheHits++
-				const lidUser = cachedLidUser.toString()
-				if (!lidUser) {
-					this.logger.warn({ pn, lidUser }, 'Invalid or empty LID user')
-					continue
-				}
-
-				const pnDevice = decoded.device ?? 0
-				const deviceSpecificLid = this.buildDeviceSpecificJid(
-					lidUser,
-					pnDevice,
-					decoded.server === 'hosted' ? 'hosted.lid' : 'lid'
-				)
-
-				if (this.config.debugLogging) {
-					this.logger.trace({ pn, deviceSpecificLid, pnDevice }, 'getLIDForPN: mapping found')
-				}
-
-				successfulPairs[pn] = { lid: deviceSpecificLid, pn }
-				continue
-			}
-
-			this.stats.cacheMisses++
-			const pendingForUser = pendingByPnUser.get(pnUser) ?? []
-			pendingForUser.push({ pn, decoded })
-			pendingByPnUser.set(pnUser, pendingForUser)
-		}
-
-		if (pendingByPnUser.size > 0) {
-			const pnUsers = [...pendingByPnUser.keys()]
-			const dbFailedPnUsers = new Set<string>()
-
-			for (const batch of this.chunkArray(pnUsers, this.config.batchSize)) {
-				try {
-					const stored = await this.retryOperation(
-						() => this.keys.get('lid-mapping', batch),
-						'get-lid-for-pn'
-					)
-
-					for (const pnUser of batch) {
-						const lidUser = stored[pnUser]
-						if (lidUser) {
-							this.stats.dbHits++
-							this.mappingCache.set(`pn:${pnUser}`, lidUser)
-							this.mappingCache.set(`lid:${lidUser}`, pnUser)
-						} else {
-							this.stats.dbMisses++
-						}
-					}
-				} catch (error) {
-					this.logger.error({ error, batch }, 'Failed to get LID mapping batch from database')
-					this.stats.failedOperations += batch.length
-					batch.forEach(pnUser => dbFailedPnUsers.add(pnUser))
-				}
-			}
-
-			for (const [pnUser, items] of pendingByPnUser.entries()) {
-				const lidUser = this.mappingCache.get(`pn:${pnUser}`)
-				for (const { pn, decoded } of items) {
-					if (lidUser && decoded) {
-						const lidUserString = lidUser.toString()
-						if (!lidUserString) {
-							this.logger.warn({ pn, lidUser }, 'Invalid or empty LID user')
-							continue
-						}
-
-						const pnDevice = decoded.device ?? 0
-						const deviceSpecificLid = this.buildDeviceSpecificJid(
-							lidUserString,
-							pnDevice,
-							decoded.server === 'hosted' ? 'hosted.lid' : 'lid'
-						)
-
-						if (this.config.debugLogging) {
-							this.logger.trace({ pn, deviceSpecificLid, pnDevice }, 'getLIDForPN: mapping found')
-						}
-
-						successfulPairs[pn] = { lid: deviceSpecificLid, pn }
+				if (cachedLidUser) {
+					this.stats.cacheHits++
+					const lidUser = cachedLidUser.toString()
+					if (!lidUser) {
+						this.logger.warn({ pn, lidUser }, 'Invalid or empty LID user')
 						continue
 					}
 
-					if (dbFailedPnUsers.has(pnUser)) {
-						failedPns.add(pn)
-					}
+					const pnDevice = decoded.device ?? 0
+					const deviceSpecificLid = this.buildDeviceSpecificJid(
+						lidUser,
+						pnDevice,
+						decoded.server === 'hosted' ? 'hosted.lid' : 'lid'
+					)
 
-					if (!decoded) continue
-
-					// Need to fetch from USync
 					if (this.config.debugLogging) {
-						this.logger.trace({ pnUser }, 'No LID mapping found, queuing for USync')
+						this.logger.trace({ pn, deviceSpecificLid, pnDevice }, 'getLIDForPN: mapping found')
 					}
 
-					const device = decoded.device || 0
-					let normalizedPn = jidNormalizedUser(pn)
-					if (isHostedPnUser(normalizedPn)) {
-						normalizedPn = `${pnUser}@s.whatsapp.net`
-					}
+					successfulPairs[pn] = { lid: deviceSpecificLid, pn }
+					continue
+				}
 
-					if (!usyncFetch[normalizedPn]) {
-						usyncFetch[normalizedPn] = [device]
-					} else {
-						usyncFetch[normalizedPn]?.push(device)
+				this.stats.cacheMisses++
+				const pendingForUser = pendingByPnUser.get(pnUser) ?? []
+				pendingForUser.push({ pn, decoded })
+				pendingByPnUser.set(pnUser, pendingForUser)
+			}
+
+			if (pendingByPnUser.size > 0) {
+				const pnUsers = [...pendingByPnUser.keys()]
+				const dbFailedPnUsers = new Set<string>()
+
+				for (const batch of this.chunkArray(pnUsers, this.config.batchSize)) {
+					try {
+						const stored = await this.retryOperation(() => this.keys.get('lid-mapping', batch), 'get-lid-for-pn')
+
+						for (const pnUser of batch) {
+							const lidUser = stored[pnUser]
+							if (lidUser) {
+								this.stats.dbHits++
+								this.mappingCache.set(`pn:${pnUser}`, lidUser)
+								this.mappingCache.set(`lid:${lidUser}`, pnUser)
+							} else {
+								this.stats.dbMisses++
+							}
+						}
+					} catch (error) {
+						this.logger.error({ error, batch }, 'Failed to get LID mapping batch from database')
+						this.stats.failedOperations += batch.length
+						batch.forEach(pnUser => dbFailedPnUsers.add(pnUser))
+					}
+				}
+
+				for (const [pnUser, items] of pendingByPnUser.entries()) {
+					const lidUser = this.mappingCache.get(`pn:${pnUser}`)
+					for (const { pn, decoded } of items) {
+						if (lidUser && decoded) {
+							const lidUserString = lidUser.toString()
+							if (!lidUserString) {
+								this.logger.warn({ pn, lidUser }, 'Invalid or empty LID user')
+								continue
+							}
+
+							const pnDevice = decoded.device ?? 0
+							const deviceSpecificLid = this.buildDeviceSpecificJid(
+								lidUserString,
+								pnDevice,
+								decoded.server === 'hosted' ? 'hosted.lid' : 'lid'
+							)
+
+							if (this.config.debugLogging) {
+								this.logger.trace({ pn, deviceSpecificLid, pnDevice }, 'getLIDForPN: mapping found')
+							}
+
+							successfulPairs[pn] = { lid: deviceSpecificLid, pn }
+							continue
+						}
+
+						if (dbFailedPnUsers.has(pnUser)) {
+							failedPns.add(pn)
+						}
+
+						if (!decoded) continue
+
+						// Need to fetch from USync
+						if (this.config.debugLogging) {
+							this.logger.trace({ pnUser }, 'No LID mapping found, queuing for USync')
+						}
+
+						const device = decoded.device || 0
+						let normalizedPn = jidNormalizedUser(pn)
+						if (isHostedPnUser(normalizedPn)) {
+							normalizedPn = `${pnUser}@s.whatsapp.net`
+						}
+
+						if (!usyncFetch[normalizedPn]) {
+							usyncFetch[normalizedPn] = [device]
+						} else {
+							usyncFetch[normalizedPn]?.push(device)
+						}
 					}
 				}
 			}
-		}
 
-		// Fetch from USync if needed
-		if (Object.keys(usyncFetch).length > 0) {
-			await this.fetchFromUSync(usyncFetch, successfulPairs)
-		}
+			// Fetch from USync if needed
+			if (Object.keys(usyncFetch).length > 0) {
+				await this.fetchFromUSync(usyncFetch, successfulPairs)
+			}
 
-		// Log warning if some PNs failed lookup
-		if (failedPns.size > 0) {
-			this.logger.warn(
-				{ failedCount: failedPns.size, totalRequested: pns.length },
-				'Some PNs failed during getLIDsForPNs - results may be incomplete'
-			)
-		}
+			// Log warning if some PNs failed lookup
+			if (failedPns.size > 0) {
+				this.logger.warn(
+					{ failedCount: failedPns.size, totalRequested: pns.length },
+					'Some PNs failed during getLIDsForPNs - results may be incomplete'
+				)
+			}
 
 			this.recordMetrics('get-lid', Object.keys(successfulPairs).length)
 			return Object.keys(successfulPairs).length > 0 ? Object.values(successfulPairs) : null
@@ -684,14 +679,10 @@ export class LIDMappingStore {
 
 			// Use request coalescing to deduplicate concurrent lookups
 			// Safe because: wrapped in trackOperation() prevents resource cleanup
-			return this.coalesceRequest(
-				lidUser,
-				this.inflightPNLookups,
-				async () => {
-					const results = await this.getPNsForLIDs([lid])
-					return results?.[0]?.pn || null
-				}
-			)
+			return this.coalesceRequest(lidUser, this.inflightPNLookups, async () => {
+				const results = await this.getPNsForLIDs([lid])
+				return results?.[0]?.pn || null
+			})
 		})
 	}
 
@@ -707,96 +698,93 @@ export class LIDMappingStore {
 			this.stats.lastOperationAt = Date.now()
 
 			const successfulPairs: { [_: string]: LIDMapping } = {}
-		const failedLids = new Set<string>()
-		const pendingByLidUser = new Map<string, Array<{ lid: string; decoded: ReturnType<typeof jidDecode> }>>()
+			const failedLids = new Set<string>()
+			const pendingByLidUser = new Map<string, Array<{ lid: string; decoded: ReturnType<typeof jidDecode> }>>()
 
-		const addResolvedPair = (lid: string, decoded: ReturnType<typeof jidDecode>, pnUser: string): void => {
-			const lidDevice = decoded?.device ?? 0
-			const server = decoded?.domainType === WAJIDDomains.HOSTED_LID ? 'hosted' : 's.whatsapp.net'
-			const pnJid = this.buildDeviceSpecificJid(pnUser, lidDevice, server)
+			const addResolvedPair = (lid: string, decoded: ReturnType<typeof jidDecode>, pnUser: string): void => {
+				const lidDevice = decoded?.device ?? 0
+				const server = decoded?.domainType === WAJIDDomains.HOSTED_LID ? 'hosted' : 's.whatsapp.net'
+				const pnJid = this.buildDeviceSpecificJid(pnUser, lidDevice, server)
 
-			if (this.config.debugLogging) {
-				this.logger.trace({ lid, pnJid }, 'Found reverse mapping')
+				if (this.config.debugLogging) {
+					this.logger.trace({ lid, pnJid }, 'Found reverse mapping')
+				}
+
+				successfulPairs[lid] = { lid, pn: pnJid }
 			}
 
-			successfulPairs[lid] = { lid, pn: pnJid }
-		}
+			for (const lid of lids) {
+				if (!isAnyLidUser(lid)) continue
 
-		for (const lid of lids) {
-			if (!isAnyLidUser(lid)) continue
+				const decoded = jidDecode(lid)
+				if (!decoded) continue
 
-			const decoded = jidDecode(lid)
-			if (!decoded) continue
+				const lidUser = decoded.user
+				const cachedPnUser = this.mappingCache.get(`lid:${lidUser}`)
 
-			const lidUser = decoded.user
-			const cachedPnUser = this.mappingCache.get(`lid:${lidUser}`)
+				if (cachedPnUser && typeof cachedPnUser === 'string') {
+					this.stats.cacheHits++
+					addResolvedPair(lid, decoded, cachedPnUser)
+					continue
+				}
 
-			if (cachedPnUser && typeof cachedPnUser === 'string') {
-				this.stats.cacheHits++
-				addResolvedPair(lid, decoded, cachedPnUser)
-				continue
+				this.stats.cacheMisses++
+				const pendingForUser = pendingByLidUser.get(lidUser) ?? []
+				pendingForUser.push({ lid, decoded })
+				pendingByLidUser.set(lidUser, pendingForUser)
 			}
 
-			this.stats.cacheMisses++
-			const pendingForUser = pendingByLidUser.get(lidUser) ?? []
-			pendingForUser.push({ lid, decoded })
-			pendingByLidUser.set(lidUser, pendingForUser)
-		}
+			if (pendingByLidUser.size > 0) {
+				const reverseKeys = [...pendingByLidUser.keys()].map(lidUser => `${lidUser}_reverse`)
+				const dbFailedReverseKeys = new Set<string>()
 
-		if (pendingByLidUser.size > 0) {
-			const reverseKeys = [...pendingByLidUser.keys()].map(lidUser => `${lidUser}_reverse`)
-			const dbFailedReverseKeys = new Set<string>()
+				for (const batch of this.chunkArray(reverseKeys, this.config.batchSize)) {
+					try {
+						const stored = await this.retryOperation(() => this.keys.get('lid-mapping', batch), 'get-pn-for-lid')
 
-			for (const batch of this.chunkArray(reverseKeys, this.config.batchSize)) {
-				try {
-					const stored = await this.retryOperation(
-						() => this.keys.get('lid-mapping', batch),
-						'get-pn-for-lid'
-					)
+						for (const reverseKey of batch) {
+							const lidUser = reverseKey.replace(/_reverse$/, '')
+							const pnUser = stored[reverseKey]
+							if (pnUser && typeof pnUser === 'string') {
+								this.stats.dbHits++
+								this.mappingCache.set(`lid:${lidUser}`, pnUser)
+								this.mappingCache.set(`pn:${pnUser}`, lidUser)
+							} else {
+								this.stats.dbMisses++
+							}
+						}
+					} catch (error) {
+						this.logger.error({ error, batch }, 'Failed to get PN mapping batch from database')
+						this.stats.failedOperations += batch.length
+						batch.forEach(reverseKey => dbFailedReverseKeys.add(reverseKey))
+					}
+				}
 
-					for (const reverseKey of batch) {
-						const lidUser = reverseKey.replace(/_reverse$/, '')
-						const pnUser = stored[reverseKey]
+				for (const [lidUser, items] of pendingByLidUser.entries()) {
+					const pnUser = this.mappingCache.get(`lid:${lidUser}`)
+					for (const { lid, decoded } of items) {
 						if (pnUser && typeof pnUser === 'string') {
-							this.stats.dbHits++
-							this.mappingCache.set(`lid:${lidUser}`, pnUser)
-							this.mappingCache.set(`pn:${pnUser}`, lidUser)
-						} else {
-							this.stats.dbMisses++
+							addResolvedPair(lid, decoded, pnUser)
+							continue
+						}
+
+						if (dbFailedReverseKeys.has(`${lidUser}_reverse`)) {
+							failedLids.add(lid)
+						}
+
+						if (this.config.debugLogging) {
+							this.logger.trace({ lidUser }, 'No reverse mapping found')
 						}
 					}
-				} catch (error) {
-					this.logger.error({ error, batch }, 'Failed to get PN mapping batch from database')
-					this.stats.failedOperations += batch.length
-					batch.forEach(reverseKey => dbFailedReverseKeys.add(reverseKey))
 				}
 			}
 
-			for (const [lidUser, items] of pendingByLidUser.entries()) {
-				const pnUser = this.mappingCache.get(`lid:${lidUser}`)
-				for (const { lid, decoded } of items) {
-					if (pnUser && typeof pnUser === 'string') {
-						addResolvedPair(lid, decoded, pnUser)
-						continue
-					}
-
-					if (dbFailedReverseKeys.has(`${lidUser}_reverse`)) {
-						failedLids.add(lid)
-					}
-
-					if (this.config.debugLogging) {
-						this.logger.trace({ lidUser }, 'No reverse mapping found')
-					}
-				}
+			if (failedLids.size > 0) {
+				this.logger.warn(
+					{ failedCount: failedLids.size, totalRequested: lids.length },
+					'Some LIDs failed during getPNsForLIDs - results may be incomplete'
+				)
 			}
-		}
-
-		if (failedLids.size > 0) {
-			this.logger.warn(
-				{ failedCount: failedLids.size, totalRequested: lids.length },
-				'Some LIDs failed during getPNsForLIDs - results may be incomplete'
-			)
-		}
 
 			this.recordMetrics('get-pn', Object.keys(successfulPairs).length)
 			return Object.keys(successfulPairs).length > 0 ? Object.values(successfulPairs) : null
@@ -935,10 +923,7 @@ export class LIDMappingStore {
 	 */
 	private checkDestroyed(): void {
 		if (this.destroyed) {
-			throw new LIDMappingError(
-				'LIDMappingStore has been destroyed',
-				LIDMappingErrorCode.DESTROYED
-			)
+			throw new LIDMappingError('LIDMappingStore has been destroyed', LIDMappingErrorCode.DESTROYED)
 		}
 	}
 
@@ -960,10 +945,7 @@ export class LIDMappingStore {
 			// Recheck destroyed after incrementing counter
 			// This ensures we fail fast if destroyed between checkDestroyed() and here
 			if (this.destroyed) {
-				throw new LIDMappingError(
-					'LIDMappingStore has been destroyed',
-					LIDMappingErrorCode.DESTROYED
-				)
+				throw new LIDMappingError('LIDMappingStore has been destroyed', LIDMappingErrorCode.DESTROYED)
 			}
 
 			return await operation()
@@ -996,6 +978,7 @@ export class LIDMappingStore {
 		for (let i = 0; i < array.length; i += size) {
 			chunks.push(array.slice(i, i + size))
 		}
+
 		return chunks
 	}
 
@@ -1012,10 +995,7 @@ export class LIDMappingStore {
 	 * Configure via: BAILEYS_LID_RETRY_ATTEMPTS (default: 3)
 	 *                BAILEYS_LID_RETRY_DELAY_MS (default: 1000)
 	 */
-	private async retryOperation<T>(
-		operation: () => T | Promise<T>,
-		operationName: string
-	): Promise<T> {
+	private async retryOperation<T>(operation: () => T | Promise<T>, operationName: string): Promise<T> {
 		let lastError: Error | undefined
 
 		for (let attempt = 1; attempt <= this.config.retryAttempts; attempt++) {
@@ -1088,10 +1068,7 @@ export class LIDMappingStore {
 						const deviceSpecificPn = this.buildDeviceSpecificJid(pnUser, device, pnServer)
 
 						if (this.config.debugLogging) {
-							this.logger.trace(
-								{ pn: pair.pn, deviceSpecificLid, device },
-								'USync fetch successful'
-							)
+							this.logger.trace({ pn: pair.pn, deviceSpecificLid, device }, 'USync fetch successful')
 						}
 
 						successfulPairs[deviceSpecificPn] = { lid: deviceSpecificLid, pn: deviceSpecificPn }
@@ -1126,11 +1103,7 @@ export class LIDMappingStore {
 	 * @param fetchFn - Function to execute if no inflight request exists
 	 * @returns Promise that resolves to the result
 	 */
-	private async coalesceRequest<T>(
-		key: string,
-		map: Map<string, Promise<T>>,
-		fetchFn: () => Promise<T>
-	): Promise<T> {
+	private async coalesceRequest<T>(key: string, map: Map<string, Promise<T>>, fetchFn: () => Promise<T>): Promise<T> {
 		// Check if request is already in-flight
 		const existing = map.get(key)
 		if (existing) {

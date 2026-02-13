@@ -34,7 +34,7 @@
  * @module Utils/prometheus-metrics
  */
 
-import { createServer, IncomingMessage, ServerResponse, Server } from 'http'
+import { createServer, IncomingMessage, Server, ServerResponse } from 'http'
 import * as os from 'os'
 import * as promClient from 'prom-client'
 
@@ -55,6 +55,7 @@ function configureRegistry(defaultLabels?: Labels): void {
 	if (registryConfigured) {
 		return // Already configured, ignore subsequent calls
 	}
+
 	registryConfigured = true
 
 	// Allow setting empty labels to clear previous (useful for testing/reconfiguration)
@@ -151,6 +152,7 @@ function parseLabelsFromEnv(envValue: string | undefined): Labels {
 		if (typeof parsed === 'object' && parsed !== null) {
 			return parsed as Labels
 		}
+
 		return {}
 	} catch {
 		return {}
@@ -173,8 +175,12 @@ export function loadMetricsConfig(): MetricsConfig {
 		// Separate flag for system metrics (CPU/memory) - independent from collectDefaultMetrics
 		includeSystem: (process.env.BAILEYS_PROMETHEUS_INCLUDE_SYSTEM ?? process.env.METRICS_INCLUDE_SYSTEM) !== 'false',
 		// Flag for prom-client default Node.js metrics
-		collectDefaultMetrics: (process.env.BAILEYS_PROMETHEUS_COLLECT_DEFAULT ?? process.env.METRICS_COLLECT_DEFAULT) !== 'false',
-		collectIntervalMs: parseInt(process.env.BAILEYS_PROMETHEUS_COLLECT_INTERVAL_MS || process.env.METRICS_COLLECT_INTERVAL_MS || '10000', 10),
+		collectDefaultMetrics:
+			(process.env.BAILEYS_PROMETHEUS_COLLECT_DEFAULT ?? process.env.METRICS_COLLECT_DEFAULT) !== 'false',
+		collectIntervalMs: parseInt(
+			process.env.BAILEYS_PROMETHEUS_COLLECT_INTERVAL_MS || process.env.METRICS_COLLECT_INTERVAL_MS || '10000',
+			10
+		)
 	}
 }
 
@@ -202,6 +208,7 @@ function stableLabelsToKey(labels: Labels): string {
 	for (const key of sortedKeys) {
 		sortedObj[key] = labels[key]!
 	}
+
 	return JSON.stringify(sortedObj)
 }
 
@@ -289,7 +296,7 @@ export class Counter implements BaseMetric {
 			name: fullName,
 			help,
 			labelNames,
-			registers: [customRegistry], // Use custom registry, not global
+			registers: [customRegistry] // Use custom registry, not global
 		})
 	}
 
@@ -351,7 +358,7 @@ export class Counter implements BaseMetric {
 		const metric = await this.promCounter.get()
 		return metric.values.map(v => ({
 			labels: v.labels as Labels,
-			value: v.value,
+			value: v.value
 		}))
 	}
 
@@ -364,7 +371,7 @@ export class Counter implements BaseMetric {
 	 */
 	labels(labels: Labels): { inc: (value?: number) => void } {
 		return {
-			inc: (value?: number) => this.inc(labels, value),
+			inc: (value?: number) => this.inc(labels, value)
 		}
 	}
 }
@@ -394,7 +401,7 @@ export class Gauge implements BaseMetric {
 			name: fullName,
 			help,
 			labelNames,
-			registers: [customRegistry], // Use custom registry, not global
+			registers: [customRegistry] // Use custom registry, not global
 		})
 	}
 
@@ -501,7 +508,7 @@ export class Gauge implements BaseMetric {
 		const metric = await this.promGauge.get()
 		return metric.values.map(v => ({
 			labels: v.labels as Labels,
-			value: v.value,
+			value: v.value
 		}))
 	}
 
@@ -520,7 +527,7 @@ export class Gauge implements BaseMetric {
 		return {
 			set: (value: number) => this.set(labels, value),
 			inc: (value?: number) => this.inc(labels, value),
-			dec: (value?: number) => this.dec(labels, value),
+			dec: (value?: number) => this.dec(labels, value)
 		}
 	}
 
@@ -566,7 +573,7 @@ export class Histogram implements BaseMetric {
 			help,
 			labelNames,
 			buckets: this.buckets,
-			registers: [customRegistry], // Use custom registry, not global
+			registers: [customRegistry] // Use custom registry, not global
 		})
 	}
 
@@ -680,7 +687,7 @@ export class Histogram implements BaseMetric {
 					labels: vLabels,
 					buckets: new Map(),
 					sum: 0,
-					count: 0,
+					count: 0
 				})
 			}
 
@@ -718,7 +725,7 @@ export class Histogram implements BaseMetric {
 	} {
 		return {
 			observe: (value: number) => this.observe(labels, value),
-			startTimer: () => this.startTimer(labels),
+			startTimer: () => this.startTimer(labels)
 		}
 	}
 }
@@ -754,7 +761,7 @@ export class Summary implements BaseMetric {
 			percentiles: this.percentiles,
 			maxAgeSeconds: options.maxAgeSeconds ?? 600, // 10 min default
 			ageBuckets: options.ageBuckets ?? 5,
-			registers: [customRegistry], // Use custom registry, not global
+			registers: [customRegistry] // Use custom registry, not global
 		})
 	}
 
@@ -852,7 +859,7 @@ export class Summary implements BaseMetric {
 					labels: vLabels,
 					values: [],
 					sum: 0,
-					count: 0,
+					count: 0
 				})
 			}
 
@@ -887,7 +894,7 @@ export class Summary implements BaseMetric {
 	} {
 		return {
 			observe: (value: number) => this.observe(labels, value),
-			startTimer: () => this.startTimer(labels),
+			startTimer: () => this.startTimer(labels)
 		}
 	}
 }
@@ -1014,7 +1021,7 @@ export class SystemMetricsCollector {
 
 	// CPU tracking for delta calculation
 	private lastCpuUsage: { user: number; system: number } | null = null
-	private lastCpuTime: number = 0
+	private lastCpuTime = 0
 
 	// Process metrics
 	public readonly processUptime: Gauge
@@ -1039,9 +1046,7 @@ export class SystemMetricsCollector {
 		this.processStartTime = Date.now()
 
 		// Initialize process metrics
-		this.processUptime = registry.register(
-			new Gauge('process_uptime_seconds', 'Process uptime in seconds')
-		)
+		this.processUptime = registry.register(new Gauge('process_uptime_seconds', 'Process uptime in seconds'))
 		// FIX: Updated description - can exceed 100% on multi-core (100% = 1 core)
 		this.processCpuUsage = registry.register(
 			new Gauge('process_cpu_usage_percent', 'Process CPU usage (100% = 1 core fully used)', ['type'])
@@ -1052,29 +1057,15 @@ export class SystemMetricsCollector {
 		this.processMemoryExternal = registry.register(
 			new Gauge('process_memory_external_bytes', 'External memory used by C++ objects')
 		)
-		this.processMemoryHeapTotal = registry.register(
-			new Gauge('process_memory_heap_total_bytes', 'Total heap memory')
-		)
-		this.processMemoryHeapUsed = registry.register(
-			new Gauge('process_memory_heap_used_bytes', 'Used heap memory')
-		)
-		this.processMemoryRss = registry.register(
-			new Gauge('process_memory_rss_bytes', 'Resident set size')
-		)
+		this.processMemoryHeapTotal = registry.register(new Gauge('process_memory_heap_total_bytes', 'Total heap memory'))
+		this.processMemoryHeapUsed = registry.register(new Gauge('process_memory_heap_used_bytes', 'Used heap memory'))
+		this.processMemoryRss = registry.register(new Gauge('process_memory_rss_bytes', 'Resident set size'))
 
 		// Initialize system metrics
-		this.systemCpuUsage = registry.register(
-			new Gauge('system_cpu_usage_percent', 'System CPU usage percentage')
-		)
-		this.systemMemoryTotal = registry.register(
-			new Gauge('system_memory_total_bytes', 'Total system memory')
-		)
-		this.systemMemoryFree = registry.register(
-			new Gauge('system_memory_free_bytes', 'Free system memory')
-		)
-		this.systemLoadAverage = registry.register(
-			new Gauge('system_load_average', 'System load average', ['period'])
-		)
+		this.systemCpuUsage = registry.register(new Gauge('system_cpu_usage_percent', 'System CPU usage percentage'))
+		this.systemMemoryTotal = registry.register(new Gauge('system_memory_total_bytes', 'Total system memory'))
+		this.systemMemoryFree = registry.register(new Gauge('system_memory_free_bytes', 'Free system memory'))
+		this.systemLoadAverage = registry.register(new Gauge('system_load_average', 'System load average', ['period']))
 
 		// Event loop lag - use different name to avoid conflict with collectDefaultMetrics
 		// prom-client's collectDefaultMetrics creates nodejs_eventloop_lag_seconds
@@ -1227,14 +1218,13 @@ export class MetricsServer {
 
 		// Cache the promise so concurrent calls get the same one
 		this.startPromise = new Promise<void>((resolve, reject) => {
-
 			// Enable prom-client's default Node.js metrics collection (only once to prevent memory leak)
 			if (this.config.collectDefaultMetrics && !defaultMetricsCollected) {
 				defaultMetricsCollected = true
 				promClient.collectDefaultMetrics({
 					prefix: this.config.prefix ? `${this.config.prefix}_` : '',
 					labels: this.config.defaultLabels,
-					register: customRegistry, // Use custom registry, not global
+					register: customRegistry // Use custom registry, not global
 				})
 			}
 
@@ -1257,11 +1247,13 @@ export class MetricsServer {
 				} catch {
 					// Malformed URL - return 400 Bad Request
 					res.writeHead(400, { 'Content-Type': 'application/json' })
-					res.end(JSON.stringify({
-						error: 'Bad Request',
-						message: 'Malformed URL',
-						timestamp: new Date().toISOString()
-					}))
+					res.end(
+						JSON.stringify({
+							error: 'Bad Request',
+							message: 'Malformed URL',
+							timestamp: new Date().toISOString()
+						})
+					)
 					return
 				}
 
@@ -1279,11 +1271,13 @@ export class MetricsServer {
 						const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 						console.error(`[Prometheus] Error collecting metrics: ${errorMessage}`)
 						res.writeHead(500, { 'Content-Type': 'application/json' })
-						res.end(JSON.stringify({
-							error: 'Failed to collect metrics',
-							message: errorMessage,
-							timestamp: new Date().toISOString()
-						}))
+						res.end(
+							JSON.stringify({
+								error: 'Failed to collect metrics',
+								message: errorMessage,
+								timestamp: new Date().toISOString()
+							})
+						)
 					}
 				} else if (pathname === '/health' && req.method === 'GET') {
 					res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -1294,7 +1288,7 @@ export class MetricsServer {
 				}
 			})
 
-			this.server.on('error', (error) => {
+			this.server.on('error', error => {
 				this.startPromise = null // Reset so retry is possible
 				this.server = null
 				reject(error)
@@ -1302,13 +1296,14 @@ export class MetricsServer {
 
 			// FIX: Use configurable host instead of hardcoded 0.0.0.0
 			this.server.listen(this.config.port, this.config.host, () => {
-				const labelsInfo = Object.keys(this.config.defaultLabels).length > 0
-					? ` with labels: ${JSON.stringify(this.config.defaultLabels)}`
-					: ''
-				const securityNote = this.config.host === '0.0.0.0'
-					? ' (WARNING: exposed on all interfaces)'
-					: ''
-				console.log(`[Prometheus] Metrics server listening on http://${this.config.host}:${this.config.port}${this.config.path}${labelsInfo}${securityNote}`)
+				const labelsInfo =
+					Object.keys(this.config.defaultLabels).length > 0
+						? ` with labels: ${JSON.stringify(this.config.defaultLabels)}`
+						: ''
+				const securityNote = this.config.host === '0.0.0.0' ? ' (WARNING: exposed on all interfaces)' : ''
+				console.log(
+					`[Prometheus] Metrics server listening on http://${this.config.host}:${this.config.port}${this.config.path}${labelsInfo}${securityNote}`
+				)
 				resolve()
 			})
 		})
@@ -1321,7 +1316,7 @@ export class MetricsServer {
 	 * FIX: Clears startPromise to allow restart after stop
 	 */
 	stop(): Promise<void> {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			// FIX: Clear cached promise so start() can be called again
 			this.startPromise = null
 
@@ -1389,24 +1384,30 @@ export const metrics = {
 		new Counter('reconnect_attempts_total', 'Total reconnection attempts', ['reason'])
 	),
 	connectionLatency: baileysMetrics.register(
-		new Histogram('connection_latency_ms', 'Connection establishment latency in ms', [], [100, 250, 500, 1000, 2500, 5000, 10000])
+		new Histogram(
+			'connection_latency_ms',
+			'Connection establishment latency in ms',
+			[],
+			[100, 250, 500, 1000, 2500, 5000, 10000]
+		)
 	),
-	activeConnections: baileysMetrics.register(
-		new Gauge('active_connections', 'Number of active WhatsApp connections')
-	),
+	activeConnections: baileysMetrics.register(new Gauge('active_connections', 'Number of active WhatsApp connections')),
 	connectionErrors: baileysMetrics.register(
 		new Counter('connection_errors_total', 'Total connection errors', ['error_type'])
 	),
 
 	// ========== Message Metrics ==========
-	messagesSent: baileysMetrics.register(
-		new Counter('messages_sent_total', 'Total messages sent', ['type'])
-	),
+	messagesSent: baileysMetrics.register(new Counter('messages_sent_total', 'Total messages sent', ['type'])),
 	messagesReceived: baileysMetrics.register(
 		new Counter('messages_received_total', 'Total messages received', ['type'])
 	),
 	messageLatency: baileysMetrics.register(
-		new Histogram('message_latency_ms', 'Message send latency in ms', ['type'], [10, 50, 100, 250, 500, 1000, 2500, 5000])
+		new Histogram(
+			'message_latency_ms',
+			'Message send latency in ms',
+			['type'],
+			[10, 50, 100, 250, 500, 1000, 2500, 5000]
+		)
 	),
 	messageRetries: baileysMetrics.register(
 		new Counter('message_retries_total', 'Total message retry attempts', ['type'])
@@ -1430,7 +1431,12 @@ export const metrics = {
 		new Counter('ctwa_messages_recovered_total', 'Total CTWA messages successfully recovered')
 	),
 	ctwaRecoveryLatency: baileysMetrics.register(
-		new Histogram('ctwa_recovery_latency_ms', 'CTWA message recovery latency in ms', [], [500, 1000, 2000, 3000, 5000, 8000, 10000])
+		new Histogram(
+			'ctwa_recovery_latency_ms',
+			'CTWA message recovery latency in ms',
+			[],
+			[500, 1000, 2000, 3000, 5000, 8000, 10000]
+		)
 	),
 	ctwaRecoveryFailures: baileysMetrics.register(
 		new Counter('ctwa_recovery_failures_total', 'Total CTWA recovery failures', ['reason'])
@@ -1438,7 +1444,11 @@ export const metrics = {
 
 	// ========== Interactive Messages Metrics (EXPERIMENTAL) ==========
 	interactiveMessagesSent: baileysMetrics.register(
-		new Counter('interactive_messages_sent_total', 'Total interactive messages sent (buttons/lists/templates/carousel)', ['type'])
+		new Counter(
+			'interactive_messages_sent_total',
+			'Total interactive messages sent (buttons/lists/templates/carousel)',
+			['type']
+		)
 	),
 	interactiveMessagesSuccess: baileysMetrics.register(
 		new Counter('interactive_messages_success_total', 'Total interactive messages successfully sent', ['type'])
@@ -1447,13 +1457,16 @@ export const metrics = {
 		new Counter('interactive_messages_failures_total', 'Total interactive message send failures', ['type', 'reason'])
 	),
 	interactiveMessagesLatency: baileysMetrics.register(
-		new Histogram('interactive_messages_latency_ms', 'Interactive message send latency in ms', ['type'], [100, 250, 500, 1000, 2500, 5000, 10000])
+		new Histogram(
+			'interactive_messages_latency_ms',
+			'Interactive message send latency in ms',
+			['type'],
+			[100, 250, 500, 1000, 2500, 5000, 10000]
+		)
 	),
 
 	// ========== Media Metrics ==========
-	mediaUploads: baileysMetrics.register(
-		new Counter('media_uploads_total', 'Total media uploads', ['type', 'status'])
-	),
+	mediaUploads: baileysMetrics.register(new Counter('media_uploads_total', 'Total media uploads', ['type', 'status'])),
 	mediaDownloads: baileysMetrics.register(
 		new Counter('media_downloads_total', 'Total media downloads', ['type', 'status'])
 	),
@@ -1461,16 +1474,17 @@ export const metrics = {
 		new Histogram('media_size_bytes', 'Media size in bytes', ['type', 'direction'], DEFAULT_SIZE_BUCKETS)
 	),
 	mediaLatency: baileysMetrics.register(
-		new Histogram('media_latency_ms', 'Media upload/download latency in ms', ['type', 'direction'], [100, 500, 1000, 2500, 5000, 10000, 30000])
+		new Histogram(
+			'media_latency_ms',
+			'Media upload/download latency in ms',
+			['type', 'direction'],
+			[100, 500, 1000, 2500, 5000, 10000, 30000]
+		)
 	),
 
 	// ========== Event Buffer Metrics ==========
-	bufferSize: baileysMetrics.register(
-		new Gauge('buffer_size', 'Current event buffer size', ['type'])
-	),
-	bufferCapacity: baileysMetrics.register(
-		new Gauge('buffer_capacity', 'Maximum event buffer capacity', ['type'])
-	),
+	bufferSize: baileysMetrics.register(new Gauge('buffer_size', 'Current event buffer size', ['type'])),
+	bufferCapacity: baileysMetrics.register(new Gauge('buffer_capacity', 'Maximum event buffer capacity', ['type'])),
 	bufferUtilization: baileysMetrics.register(
 		new Gauge('buffer_utilization_percent', 'Event buffer utilization percentage', ['type'])
 	),
@@ -1487,7 +1501,12 @@ export const metrics = {
 		new Counter('events_dropped_total', 'Total events dropped due to buffer full', ['event_type'])
 	),
 	bufferFlushLatency: baileysMetrics.register(
-		new Histogram('buffer_flush_latency_ms', 'Buffer flush operation latency in ms', ['type'], [1, 5, 10, 25, 50, 100, 250])
+		new Histogram(
+			'buffer_flush_latency_ms',
+			'Buffer flush operation latency in ms',
+			['type'],
+			[1, 5, 10, 25, 50, 100, 250]
+		)
 	),
 	eventsProcessed: baileysMetrics.register(
 		new Counter('events_processed_total', 'Total events processed from buffer', ['event_type'])
@@ -1501,9 +1520,7 @@ export const metrics = {
 	bufferCacheCleanup: baileysMetrics.register(
 		new Counter('buffer_cache_cleanup_total', 'Total cache cleanup operations')
 	),
-	bufferCacheSize: baileysMetrics.register(
-		new Gauge('buffer_cache_size', 'Current buffer cache size')
-	),
+	bufferCacheSize: baileysMetrics.register(new Gauge('buffer_cache_size', 'Current buffer cache size')),
 
 	// ========== Adaptive Flush Metrics ==========
 	adaptiveFlushInterval: baileysMetrics.register(
@@ -1524,45 +1541,29 @@ export const metrics = {
 	adaptiveHealthStatus: baileysMetrics.register(
 		new Gauge('adaptive_health_status', 'Adaptive system health status (0=unhealthy, 1=healthy)')
 	),
-	adaptiveEventRate: baileysMetrics.register(
-		new Gauge('adaptive_event_rate', 'Current event rate per second')
-	),
+	adaptiveEventRate: baileysMetrics.register(new Gauge('adaptive_event_rate', 'Current event rate per second')),
 
 	// ========== Error Metrics ==========
-	errors: baileysMetrics.register(
-		new Counter('errors_total', 'Total errors', ['category', 'code'])
-	),
-	errorRate: baileysMetrics.register(
-		new Gauge('error_rate', 'Current error rate per minute', ['category'])
-	),
+	errors: baileysMetrics.register(new Counter('errors_total', 'Total errors', ['category', 'code'])),
+	errorRate: baileysMetrics.register(new Gauge('error_rate', 'Current error rate per minute', ['category'])),
 
 	// ========== Retry Metrics ==========
-	retries: baileysMetrics.register(
-		new Counter('retries_total', 'Total retries', ['operation'])
-	),
-	retryLatency: baileysMetrics.register(
-		new Histogram('retry_latency_ms', 'Retry latency in ms', ['operation'])
-	),
-	retrySuccess: baileysMetrics.register(
-		new Counter('retry_success_total', 'Successful retries', ['operation'])
-	),
+	retries: baileysMetrics.register(new Counter('retries_total', 'Total retries', ['operation'])),
+	retryLatency: baileysMetrics.register(new Histogram('retry_latency_ms', 'Retry latency in ms', ['operation'])),
+	retrySuccess: baileysMetrics.register(new Counter('retry_success_total', 'Successful retries', ['operation'])),
 	retryExhausted: baileysMetrics.register(
 		new Counter('retry_exhausted_total', 'Exhausted retry attempts', ['operation'])
 	),
 
 	// ========== Socket Metrics ==========
-	socketEvents: baileysMetrics.register(
-		new Counter('socket_events_total', 'Total socket events', ['event'])
-	),
+	socketEvents: baileysMetrics.register(new Counter('socket_events_total', 'Total socket events', ['event'])),
 	socketLatency: baileysMetrics.register(
 		new Histogram('socket_latency_ms', 'Socket operation latency in ms', ['operation'])
 	),
 	socketBytesReceived: baileysMetrics.register(
 		new Counter('socket_bytes_received_total', 'Total bytes received through socket')
 	),
-	socketBytesSent: baileysMetrics.register(
-		new Counter('socket_bytes_sent_total', 'Total bytes sent through socket')
-	),
+	socketBytesSent: baileysMetrics.register(new Counter('socket_bytes_sent_total', 'Total bytes sent through socket')),
 	socketReconnects: baileysMetrics.register(
 		new Counter('socket_reconnects_total', 'Total socket reconnection attempts', ['reason'])
 	),
@@ -1594,12 +1595,8 @@ export const metrics = {
 	encryptionLatency: baileysMetrics.register(
 		new Histogram('encryption_latency_ms', 'Encryption operation latency in ms', ['operation'], [1, 5, 10, 25, 50, 100])
 	),
-	keyExchanges: baileysMetrics.register(
-		new Counter('key_exchanges_total', 'Total key exchange operations', ['type'])
-	),
-	preKeyCount: baileysMetrics.register(
-		new Gauge('prekey_count', 'Current prekey count')
-	),
+	keyExchanges: baileysMetrics.register(new Counter('key_exchanges_total', 'Total key exchange operations', ['type'])),
+	preKeyCount: baileysMetrics.register(new Gauge('prekey_count', 'Current prekey count')),
 
 	// ========== Signal Identity Metrics ==========
 	/** Total identity key changes detected (contact reinstalled WhatsApp) */
@@ -1623,7 +1620,12 @@ export const metrics = {
 	),
 	/** Identity key operations latency */
 	signalIdentityKeyOperations: baileysMetrics.register(
-		new Histogram('signal_identity_key_operations_ms', 'Identity key operation latency in ms', ['operation'], [1, 5, 10, 25, 50, 100])
+		new Histogram(
+			'signal_identity_key_operations_ms',
+			'Identity key operation latency in ms',
+			['operation'],
+			[1, 5, 10, 25, 50, 100]
+		)
 	),
 	/** Current identity key cache size */
 	signalIdentityKeyCacheSize: baileysMetrics.register(
@@ -1631,21 +1633,13 @@ export const metrics = {
 	),
 
 	// ========== Cache Metrics ==========
-	cacheHits: baileysMetrics.register(
-		new Counter('cache_hits_total', 'Total cache hits', ['cache'])
-	),
-	cacheMisses: baileysMetrics.register(
-		new Counter('cache_misses_total', 'Total cache misses', ['cache'])
-	),
-	cacheSize: baileysMetrics.register(
-		new Gauge('cache_size', 'Current cache size', ['cache'])
-	),
+	cacheHits: baileysMetrics.register(new Counter('cache_hits_total', 'Total cache hits', ['cache'])),
+	cacheMisses: baileysMetrics.register(new Counter('cache_misses_total', 'Total cache misses', ['cache'])),
+	cacheSize: baileysMetrics.register(new Gauge('cache_size', 'Current cache size', ['cache'])),
 	cacheEvictions: baileysMetrics.register(
 		new Counter('cache_evictions_total', 'Total cache evictions', ['cache', 'reason'])
 	),
-	cacheHitRate: baileysMetrics.register(
-		new Gauge('cache_hit_rate', 'Cache hit rate (0-1)', ['cache'])
-	),
+	cacheHitRate: baileysMetrics.register(new Gauge('cache_hit_rate', 'Cache hit rate (0-1)', ['cache'])),
 
 	// ========== Query Metrics ==========
 	queryLatency: baileysMetrics.register(
@@ -1654,17 +1648,13 @@ export const metrics = {
 	queryCount: baileysMetrics.register(
 		new Counter('query_count_total', 'Total queries executed', ['query_type', 'status'])
 	),
-	queryTimeouts: baileysMetrics.register(
-		new Counter('query_timeouts_total', 'Total query timeouts', ['query_type'])
-	),
+	queryTimeouts: baileysMetrics.register(new Counter('query_timeouts_total', 'Total query timeouts', ['query_type'])),
 
 	// ========== Presence Metrics ==========
 	presenceUpdates: baileysMetrics.register(
 		new Counter('presence_updates_total', 'Total presence updates received', ['type'])
 	),
-	presenceSubscriptions: baileysMetrics.register(
-		new Gauge('presence_subscriptions', 'Current presence subscriptions')
-	),
+	presenceSubscriptions: baileysMetrics.register(new Gauge('presence_subscriptions', 'Current presence subscriptions')),
 
 	// ========== Group Metrics ==========
 	groupOperations: baileysMetrics.register(
@@ -1682,8 +1672,13 @@ export const metrics = {
 		new Counter('history_sync_messages_total', 'Total messages synced from history')
 	),
 	historySyncDuration: baileysMetrics.register(
-		new Histogram('history_sync_duration_ms', 'History sync duration in ms', ['type'], [1000, 5000, 10000, 30000, 60000])
-	),
+		new Histogram(
+			'history_sync_duration_ms',
+			'History sync duration in ms',
+			['type'],
+			[1000, 5000, 10000, 30000, 60000]
+		)
+	)
 }
 
 // ============================================
@@ -1764,7 +1759,10 @@ export class PrometheusMetricsManager {
  * Helper to create HTTP metrics endpoint handler
  */
 export function createMetricsHandler(registry: MetricsRegistry = baileysMetrics) {
-	return async (_req: unknown, res: { setHeader: (name: string, value: string) => void; end: (body: string) => void }) => {
+	return async (
+		_req: unknown,
+		res: { setHeader: (name: string, value: string) => void; end: (body: string) => void }
+	) => {
 		const metricsOutput = await registry.getMetricsOutput()
 		res.setHeader('Content-Type', registry.contentType())
 		res.end(metricsOutput)
@@ -1785,17 +1783,14 @@ export function createExpressMetricsMiddleware(registry: MetricsRegistry = baile
 /**
  * Track operation duration using histogram
  */
-export function trackDuration<T>(
-	histogram: Histogram,
-	labels: Labels,
-	operation: () => T
-): T {
+export function trackDuration<T>(histogram: Histogram, labels: Labels, operation: () => T): T {
 	const endTimer = histogram.startTimer(labels)
 	try {
 		const result = operation()
 		if (result instanceof Promise) {
 			return result.finally(() => endTimer()) as T
 		}
+
 		endTimer()
 		return result
 	} catch (error) {
@@ -1826,14 +1821,10 @@ export async function trackDurationAsync<T>(
 /**
  * Increment counter with automatic error tracking
  */
-export function trackOperation(
-	successCounter: Counter,
-	errorCounter: Counter,
-	labels: Labels
-) {
+export function trackOperation(successCounter: Counter, errorCounter: Counter, labels: Labels) {
 	return {
 		success: () => successCounter.inc(labels),
-		failure: (errorCode?: string) => errorCounter.inc({ ...labels, code: errorCode || 'unknown' }),
+		failure: (errorCode?: string) => errorCounter.inc({ ...labels, code: errorCode || 'unknown' })
 	}
 }
 
@@ -1860,24 +1851,13 @@ function getEventBufferMetrics() {
 				[],
 				[1, 5, 10, 25, 50, 100, 250, 500, 1000]
 			),
-			bufferCurrentSize: new Gauge(
-				'buffer_current_size',
-				'Current number of events in buffer'
-			),
-			bufferPeakSize: new Gauge(
-				'buffer_peak_size',
-				'Peak buffer size reached'
-			),
-			bufferHistoryCacheSize: new Gauge(
-				'buffer_history_cache_size',
-				'Current size of history cache'
-			),
-			bufferLruCleanups: new Counter(
-				'buffer_lru_cleanups_total',
-				'Total number of LRU cache cleanups performed'
-			)
+			bufferCurrentSize: new Gauge('buffer_current_size', 'Current number of events in buffer'),
+			bufferPeakSize: new Gauge('buffer_peak_size', 'Peak buffer size reached'),
+			bufferHistoryCacheSize: new Gauge('buffer_history_cache_size', 'Current size of history cache'),
+			bufferLruCleanups: new Counter('buffer_lru_cleanups_total', 'Total number of LRU cache cleanups performed')
 		}
 	}
+
 	return eventBufferMetrics
 }
 
@@ -1885,7 +1865,7 @@ function getEventBufferMetrics() {
  * Record an event being buffered
  * Used by event-buffer.ts for metrics integration
  */
-export function recordEventBuffered(eventType: string, count: number = 1): void {
+export function recordEventBuffered(eventType: string, count = 1): void {
 	try {
 		// Use the main metrics object which has eventsBuffered with label ['event_type']
 		metrics.eventsBuffered?.inc({ event_type: eventType }, count)
@@ -2065,7 +2045,7 @@ export function recordConnectionAttempt(status: 'success' | 'failure'): void {
 /**
  * Record a message sent
  */
-export function recordMessageSent(type: string = 'text'): void {
+export function recordMessageSent(type = 'text'): void {
 	try {
 		metrics.messagesSent?.inc({ type })
 	} catch {
@@ -2076,7 +2056,7 @@ export function recordMessageSent(type: string = 'text'): void {
 /**
  * Record a message received
  */
-export function recordMessageReceived(type: string = 'text'): void {
+export function recordMessageReceived(type = 'text'): void {
 	try {
 		metrics.messagesReceived?.inc({ type })
 	} catch {
@@ -2087,7 +2067,7 @@ export function recordMessageReceived(type: string = 'text'): void {
 /**
  * Record a message retry attempt
  */
-export function recordMessageRetry(type: string = 'text'): void {
+export function recordMessageRetry(type = 'text'): void {
 	try {
 		metrics.messageRetries?.inc({ type })
 	} catch {
@@ -2098,7 +2078,7 @@ export function recordMessageRetry(type: string = 'text'): void {
 /**
  * Record a message failure
  */
-export function recordMessageFailure(type: string = 'text', reason: string = 'unknown'): void {
+export function recordMessageFailure(type = 'text', reason = 'unknown'): void {
 	try {
 		metrics.messageFailures?.inc({ type, reason })
 	} catch {
@@ -2109,7 +2089,7 @@ export function recordMessageFailure(type: string = 'text', reason: string = 'un
 /**
  * Update messages queued gauge
  */
-export function setMessagesQueued(count: number, priority: string = 'normal'): void {
+export function setMessagesQueued(count: number, priority = 'normal'): void {
 	try {
 		metrics.messagesQueued?.set({ priority }, count)
 	} catch {
@@ -2120,7 +2100,7 @@ export function setMessagesQueued(count: number, priority: string = 'normal'): v
 /**
  * Record history sync messages
  */
-export function recordHistorySyncMessages(count: number = 1): void {
+export function recordHistorySyncMessages(count = 1): void {
 	try {
 		metrics.historySyncMessages?.inc({}, count)
 	} catch {
@@ -2144,6 +2124,7 @@ export function getMetricsManager(config?: Partial<MetricsConfig>): PrometheusMe
 	if (!globalMetricsManager) {
 		globalMetricsManager = new PrometheusMetricsManager(config)
 	}
+
 	return globalMetricsManager
 }
 
@@ -2231,7 +2212,7 @@ if (metricsConfig.enabled) {
 			.then(() => {
 				console.log('[Prometheus] Auto-initialized metrics server successfully')
 			})
-			.catch((error) => {
+			.catch(error => {
 				console.error('[Prometheus] Failed to auto-initialize metrics server:', error)
 			})
 	})

@@ -2,17 +2,17 @@
  * Testes unitários para circuit-breaker.ts
  */
 
-import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals'
+import { afterEach, beforeEach, describe, expect, it } from '@jest/globals'
 import {
 	CircuitBreaker,
-	createCircuitBreaker,
 	CircuitBreakerRegistry,
-	globalCircuitRegistry,
 	CircuitOpenError,
-	CircuitTimeoutError,
-	withCircuitBreaker,
-	getCircuitHealth,
 	type CircuitState,
+	CircuitTimeoutError,
+	createCircuitBreaker,
+	getCircuitHealth,
+	globalCircuitRegistry,
+	withCircuitBreaker
 } from '../../Utils/circuit-breaker.js'
 
 describe('CircuitBreaker', () => {
@@ -25,7 +25,7 @@ describe('CircuitBreaker', () => {
 			successThreshold: 2,
 			resetTimeout: 100,
 			timeout: 1000,
-			collectMetrics: false,
+			collectMetrics: false
 		})
 	})
 
@@ -50,7 +50,7 @@ describe('CircuitBreaker', () => {
 
 		it('should execute async operations', async () => {
 			const result = await breaker.execute(async () => {
-				await new Promise((resolve) => setTimeout(resolve, 10))
+				await new Promise(resolve => setTimeout(resolve, 10))
 				return 'async success'
 			})
 			expect(result).toBe('async success')
@@ -124,7 +124,7 @@ describe('CircuitBreaker', () => {
 		})
 
 		it('should transition to half-open after reset timeout', async () => {
-			await new Promise((resolve) => setTimeout(resolve, 150))
+			await new Promise(resolve => setTimeout(resolve, 150))
 			expect(breaker.isHalfOpen()).toBe(true)
 		})
 	})
@@ -132,7 +132,7 @@ describe('CircuitBreaker', () => {
 	describe('half-open state', () => {
 		beforeEach(async () => {
 			breaker.trip()
-			await new Promise((resolve) => setTimeout(resolve, 150))
+			await new Promise(resolve => setTimeout(resolve, 150))
 		})
 
 		it('should close after success threshold', async () => {
@@ -176,14 +176,12 @@ describe('CircuitBreaker', () => {
 			const slowBreaker = createCircuitBreaker({
 				name: 'slow',
 				timeout: 50,
-				collectMetrics: false,
+				collectMetrics: false
 			})
 
-			await expect(
-				slowBreaker.execute(
-					() => new Promise((resolve) => setTimeout(resolve, 200))
-				)
-			).rejects.toThrow(CircuitTimeoutError)
+			await expect(slowBreaker.execute(() => new Promise(resolve => setTimeout(resolve, 200)))).rejects.toThrow(
+				CircuitTimeoutError
+			)
 
 			slowBreaker.destroy()
 		})
@@ -193,7 +191,7 @@ describe('CircuitBreaker', () => {
 		it('should emit state-change event', async () => {
 			const stateChanges: Array<{ from: CircuitState; to: CircuitState }> = []
 
-			breaker.on('state-change', (change) => {
+			breaker.on('state-change', change => {
 				stateChanges.push(change)
 			})
 
@@ -230,7 +228,7 @@ describe('CircuitBreaker', () => {
 				name: 'custom',
 				failureThreshold: 1,
 				shouldCountError: (error: any) => error.message !== 'Ignored',
-				collectMetrics: false,
+				collectMetrics: false
 			})
 
 			// This error should be ignored
@@ -333,7 +331,7 @@ describe('withCircuitBreaker', () => {
 			},
 			{
 				name: 'wrapped-fn',
-				collectMetrics: false,
+				collectMetrics: false
 			}
 		)
 

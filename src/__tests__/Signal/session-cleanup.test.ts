@@ -1,8 +1,8 @@
 import { jest } from '@jest/globals'
 import P from 'pino'
-import { makeSessionCleanup } from '../../Signal/session-cleanup'
-import type { SessionActivityTracker } from '../../Signal/session-activity-tracker'
 import type { LIDMappingStore } from '../../Signal/lid-mapping'
+import type { SessionActivityTracker } from '../../Signal/session-activity-tracker'
+import { makeSessionCleanup } from '../../Signal/session-cleanup'
 import type { SignalKeyStoreWithTransaction } from '../../Types'
 
 const mockKeys: jest.Mocked<SignalKeyStoreWithTransaction> = {
@@ -44,7 +44,7 @@ describe('SessionCleanup', () => {
 
 		it('should delete LID orphan after 24h of inactivity', async () => {
 			const now = Date.now()
-			const lastActivity = now - (25 * HOUR_MS) // 25 hours ago
+			const lastActivity = now - 25 * HOUR_MS // 25 hours ago
 
 			// Mock sessions: 1 LID orphan
 			// @ts-ignore
@@ -56,17 +56,9 @@ describe('SessionCleanup', () => {
 			mockLidMapping.getPNForLID.mockResolvedValue(null)
 
 			// Mock: Activity 25h ago
-			mockActivityTracker.getAllActivities.mockResolvedValue(
-				new Map([['123456789@lid', lastActivity]])
-			)
+			mockActivityTracker.getAllActivities.mockResolvedValue(new Map([['123456789@lid', lastActivity]]))
 
-			const cleanup = makeSessionCleanup(
-				mockKeys,
-				mockLidMapping as any,
-				mockActivityTracker as any,
-				logger,
-				config
-			)
+			const cleanup = makeSessionCleanup(mockKeys, mockLidMapping as any, mockActivityTracker as any, logger, config)
 
 			const stats = await cleanup.runCleanup()
 
@@ -79,7 +71,7 @@ describe('SessionCleanup', () => {
 
 		it('should NOT delete LID orphan before 24h', async () => {
 			const now = Date.now()
-			const lastActivity = now - (23 * HOUR_MS) // 23 hours ago
+			const lastActivity = now - 23 * HOUR_MS // 23 hours ago
 
 			// @ts-ignore
 			mockKeys.get.mockResolvedValue({
@@ -88,17 +80,9 @@ describe('SessionCleanup', () => {
 
 			mockLidMapping.getPNForLID.mockResolvedValue(null)
 
-			mockActivityTracker.getAllActivities.mockResolvedValue(
-				new Map([['123456789@lid', lastActivity]])
-			)
+			mockActivityTracker.getAllActivities.mockResolvedValue(new Map([['123456789@lid', lastActivity]]))
 
-			const cleanup = makeSessionCleanup(
-				mockKeys,
-				mockLidMapping as any,
-				mockActivityTracker as any,
-				logger,
-				config
-			)
+			const cleanup = makeSessionCleanup(mockKeys, mockLidMapping as any, mockActivityTracker as any, logger, config)
 
 			const stats = await cleanup.runCleanup()
 
@@ -118,13 +102,7 @@ describe('SessionCleanup', () => {
 			// No activity tracked
 			mockActivityTracker.getAllActivities.mockResolvedValue(new Map())
 
-			const cleanup = makeSessionCleanup(
-				mockKeys,
-				mockLidMapping as any,
-				mockActivityTracker as any,
-				logger,
-				config
-			)
+			const cleanup = makeSessionCleanup(mockKeys, mockLidMapping as any, mockActivityTracker as any, logger, config)
 
 			const stats = await cleanup.runCleanup()
 
@@ -134,7 +112,7 @@ describe('SessionCleanup', () => {
 
 		it('should NOT delete LID with valid PN mapping', async () => {
 			const now = Date.now()
-			const lastActivity = now - (25 * HOUR_MS)
+			const lastActivity = now - 25 * HOUR_MS
 
 			// @ts-ignore
 			mockKeys.get.mockResolvedValue({
@@ -144,17 +122,9 @@ describe('SessionCleanup', () => {
 			// Has PN mapping - not orphan
 			mockLidMapping.getPNForLID.mockResolvedValue('5511999999999@s.whatsapp.net')
 
-			mockActivityTracker.getAllActivities.mockResolvedValue(
-				new Map([['123456789@lid', lastActivity]])
-			)
+			mockActivityTracker.getAllActivities.mockResolvedValue(new Map([['123456789@lid', lastActivity]]))
 
-			const cleanup = makeSessionCleanup(
-				mockKeys,
-				mockLidMapping as any,
-				mockActivityTracker as any,
-				logger,
-				config
-			)
+			const cleanup = makeSessionCleanup(mockKeys, mockLidMapping as any, mockActivityTracker as any, logger, config)
 
 			const stats = await cleanup.runCleanup()
 
@@ -177,7 +147,7 @@ describe('SessionCleanup', () => {
 
 		it('should delete secondary device (Web/Desktop) after 15 days', async () => {
 			const now = Date.now()
-			const lastActivity = now - (16 * DAY_MS) // 16 days ago
+			const lastActivity = now - 16 * DAY_MS // 16 days ago
 
 			// Mock: Secondary device (device ID = 1)
 			// @ts-ignore
@@ -189,13 +159,7 @@ describe('SessionCleanup', () => {
 				new Map([['5511999999999:1@s.whatsapp.net', lastActivity]])
 			)
 
-			const cleanup = makeSessionCleanup(
-				mockKeys,
-				mockLidMapping as any,
-				mockActivityTracker as any,
-				logger,
-				config
-			)
+			const cleanup = makeSessionCleanup(mockKeys, mockLidMapping as any, mockActivityTracker as any, logger, config)
 
 			const stats = await cleanup.runCleanup()
 
@@ -205,7 +169,7 @@ describe('SessionCleanup', () => {
 
 		it('should NOT delete secondary device before 15 days', async () => {
 			const now = Date.now()
-			const lastActivity = now - (14 * DAY_MS) // 14 days ago
+			const lastActivity = now - 14 * DAY_MS // 14 days ago
 
 			// @ts-ignore
 			mockKeys.get.mockResolvedValue({
@@ -216,13 +180,7 @@ describe('SessionCleanup', () => {
 				new Map([['5511999999999:1@s.whatsapp.net', lastActivity]])
 			)
 
-			const cleanup = makeSessionCleanup(
-				mockKeys,
-				mockLidMapping as any,
-				mockActivityTracker as any,
-				logger,
-				config
-			)
+			const cleanup = makeSessionCleanup(mockKeys, mockLidMapping as any, mockActivityTracker as any, logger, config)
 
 			const stats = await cleanup.runCleanup()
 
@@ -239,13 +197,7 @@ describe('SessionCleanup', () => {
 			// No activity tracked - grace period
 			mockActivityTracker.getAllActivities.mockResolvedValue(new Map())
 
-			const cleanup = makeSessionCleanup(
-				mockKeys,
-				mockLidMapping as any,
-				mockActivityTracker as any,
-				logger,
-				config
-			)
+			const cleanup = makeSessionCleanup(mockKeys, mockLidMapping as any, mockActivityTracker as any, logger, config)
 
 			const stats = await cleanup.runCleanup()
 
@@ -268,7 +220,7 @@ describe('SessionCleanup', () => {
 
 		it('should delete primary device after 30 days', async () => {
 			const now = Date.now()
-			const lastActivity = now - (31 * DAY_MS) // 31 days ago
+			const lastActivity = now - 31 * DAY_MS // 31 days ago
 
 			// Mock: Primary device (device ID = 0)
 			// @ts-ignore
@@ -276,17 +228,9 @@ describe('SessionCleanup', () => {
 				'5511999999999_0.0': Buffer.from('session-data')
 			})
 
-			mockActivityTracker.getAllActivities.mockResolvedValue(
-				new Map([['5511999999999@s.whatsapp.net', lastActivity]])
-			)
+			mockActivityTracker.getAllActivities.mockResolvedValue(new Map([['5511999999999@s.whatsapp.net', lastActivity]]))
 
-			const cleanup = makeSessionCleanup(
-				mockKeys,
-				mockLidMapping as any,
-				mockActivityTracker as any,
-				logger,
-				config
-			)
+			const cleanup = makeSessionCleanup(mockKeys, mockLidMapping as any, mockActivityTracker as any, logger, config)
 
 			const stats = await cleanup.runCleanup()
 
@@ -296,24 +240,16 @@ describe('SessionCleanup', () => {
 
 		it('should NOT delete primary device before 30 days', async () => {
 			const now = Date.now()
-			const lastActivity = now - (29 * DAY_MS) // 29 days ago
+			const lastActivity = now - 29 * DAY_MS // 29 days ago
 
 			// @ts-ignore
 			mockKeys.get.mockResolvedValue({
 				'5511999999999_0.0': Buffer.from('session-data')
 			})
 
-			mockActivityTracker.getAllActivities.mockResolvedValue(
-				new Map([['5511999999999@s.whatsapp.net', lastActivity]])
-			)
+			mockActivityTracker.getAllActivities.mockResolvedValue(new Map([['5511999999999@s.whatsapp.net', lastActivity]]))
 
-			const cleanup = makeSessionCleanup(
-				mockKeys,
-				mockLidMapping as any,
-				mockActivityTracker as any,
-				logger,
-				config
-			)
+			const cleanup = makeSessionCleanup(mockKeys, mockLidMapping as any, mockActivityTracker as any, logger, config)
 
 			const stats = await cleanup.runCleanup()
 
@@ -336,7 +272,7 @@ describe('SessionCleanup', () => {
 
 		it('should handle exactly 24h for LID orphan (boundary)', async () => {
 			const now = Date.now()
-			const lastActivity = now - (24 * HOUR_MS) // Exactly 24h
+			const lastActivity = now - 24 * HOUR_MS // Exactly 24h
 
 			// @ts-ignore
 			mockKeys.get.mockResolvedValue({
@@ -345,17 +281,9 @@ describe('SessionCleanup', () => {
 
 			mockLidMapping.getPNForLID.mockResolvedValue(null)
 
-			mockActivityTracker.getAllActivities.mockResolvedValue(
-				new Map([['123456789@lid', lastActivity]])
-			)
+			mockActivityTracker.getAllActivities.mockResolvedValue(new Map([['123456789@lid', lastActivity]]))
 
-			const cleanup = makeSessionCleanup(
-				mockKeys,
-				mockLidMapping as any,
-				mockActivityTracker as any,
-				logger,
-				config
-			)
+			const cleanup = makeSessionCleanup(mockKeys, mockLidMapping as any, mockActivityTracker as any, logger, config)
 
 			const stats = await cleanup.runCleanup()
 
@@ -367,13 +295,7 @@ describe('SessionCleanup', () => {
 			// @ts-ignore
 			mockKeys.get.mockResolvedValue({})
 
-			const cleanup = makeSessionCleanup(
-				mockKeys,
-				mockLidMapping as any,
-				mockActivityTracker as any,
-				logger,
-				config
-			)
+			const cleanup = makeSessionCleanup(mockKeys, mockLidMapping as any, mockActivityTracker as any, logger, config)
 
 			const stats = await cleanup.runCleanup()
 
@@ -392,13 +314,7 @@ describe('SessionCleanup', () => {
 			mockLidMapping.getPNForLID.mockResolvedValue(null)
 
 			// Pass null tracker
-			const cleanup = makeSessionCleanup(
-				mockKeys,
-				mockLidMapping as any,
-				null,
-				logger,
-				config
-			)
+			const cleanup = makeSessionCleanup(mockKeys, mockLidMapping as any, null, logger, config)
 
 			const stats = await cleanup.runCleanup()
 
@@ -439,20 +355,14 @@ describe('SessionCleanup', () => {
 
 			mockActivityTracker.getAllActivities.mockResolvedValue(
 				new Map([
-					['123456789@lid', now - (25 * HOUR_MS)], // LID orphan: 25h ago
-					['5511999999999:1@s.whatsapp.net', now - (16 * DAY_MS)], // Secondary: 16 days ago
-					['5511888888888@s.whatsapp.net', now - (31 * DAY_MS)], // Primary: 31 days ago
-					['5511777777777@s.whatsapp.net', now - (5 * DAY_MS)] // Primary: 5 days ago (active)
+					['123456789@lid', now - 25 * HOUR_MS], // LID orphan: 25h ago
+					['5511999999999:1@s.whatsapp.net', now - 16 * DAY_MS], // Secondary: 16 days ago
+					['5511888888888@s.whatsapp.net', now - 31 * DAY_MS], // Primary: 31 days ago
+					['5511777777777@s.whatsapp.net', now - 5 * DAY_MS] // Primary: 5 days ago (active)
 				])
 			)
 
-			const cleanup = makeSessionCleanup(
-				mockKeys,
-				mockLidMapping as any,
-				mockActivityTracker as any,
-				logger,
-				config
-			)
+			const cleanup = makeSessionCleanup(mockKeys, mockLidMapping as any, mockActivityTracker as any, logger, config)
 
 			const stats = await cleanup.runCleanup()
 
@@ -482,13 +392,7 @@ describe('SessionCleanup', () => {
 				'123456789_2.0': Buffer.from('session-data')
 			})
 
-			const cleanup = makeSessionCleanup(
-				mockKeys,
-				mockLidMapping as any,
-				mockActivityTracker as any,
-				logger,
-				config
-			)
+			const cleanup = makeSessionCleanup(mockKeys, mockLidMapping as any, mockActivityTracker as any, logger, config)
 
 			const stats = await cleanup.runCleanup()
 
@@ -520,8 +424,8 @@ describe('SessionCleanup', () => {
 
 			mockActivityTracker.getAllActivities.mockResolvedValue(
 				new Map([
-					['123456789@lid', now - (13 * HOUR_MS)], // 13h ago
-					['5511999999999:1@s.whatsapp.net', now - (6 * DAY_MS)] // 6 days ago
+					['123456789@lid', now - 13 * HOUR_MS], // 13h ago
+					['5511999999999:1@s.whatsapp.net', now - 6 * DAY_MS] // 6 days ago
 				])
 			)
 

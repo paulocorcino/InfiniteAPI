@@ -9,9 +9,9 @@
  * - Compatibilidade com Pino, Console e StructuredLogger
  */
 
-import type { ILogger } from './logger.js'
 import type P from 'pino'
-import { StructuredLogger, createStructuredLogger, type LogLevel, LOG_LEVEL_VALUES } from './structured-logger.js'
+import type { ILogger } from './logger.js'
+import { createStructuredLogger, LOG_LEVEL_VALUES, type LogLevel, StructuredLogger } from './structured-logger.js'
 
 /**
  * Tipo de logger suportado
@@ -43,7 +43,7 @@ const PINO_LEVEL_MAPPING: Record<number, LogLevel> = {
 	30: 'info',
 	40: 'warn',
 	50: 'error',
-	60: 'fatal',
+	60: 'fatal'
 }
 
 /**
@@ -56,7 +56,7 @@ const STRUCTURED_TO_PINO_LEVEL: Record<LogLevel, number> = {
 	warn: 40,
 	error: 50,
 	fatal: 60,
-	silent: 100,
+	silent: 100
 }
 
 /**
@@ -74,7 +74,7 @@ export class LoggerAdapter implements ILogger {
 			targetType: config.targetType || 'structured',
 			levelMapping: config.levelMapping,
 			contextTransformer: config.contextTransformer,
-			logFilter: config.logFilter,
+			logFilter: config.logFilter
 		}
 	}
 
@@ -133,6 +133,7 @@ export class LoggerAdapter implements ILogger {
 		if (this.config.logFilter) {
 			return this.config.logFilter(level, msg, obj)
 		}
+
 		return true
 	}
 
@@ -191,7 +192,7 @@ export class PinoToStructuredAdapter implements ILogger {
 		this.pinoLogger = pinoLogger
 		this.structuredLogger = createStructuredLogger({
 			level: this.mapPinoLevel(pinoLogger.level),
-			...structuredLoggerConfig,
+			...structuredLoggerConfig
 		})
 	}
 
@@ -212,7 +213,7 @@ export class PinoToStructuredAdapter implements ILogger {
 			warn: 'warn',
 			error: 'error',
 			fatal: 'fatal',
-			silent: 'silent',
+			silent: 'silent'
 		}
 		return levelMap[pinoLevel] || 'info'
 	}
@@ -258,10 +259,7 @@ export class PinoToStructuredAdapter implements ILogger {
 /**
  * Factory para criar adapter baseado no tipo de logger
  */
-export function createLoggerAdapter(
-	logger: ILogger,
-	config?: Partial<LoggerAdapterConfig>
-): LoggerAdapter {
+export function createLoggerAdapter(logger: ILogger, config?: Partial<LoggerAdapterConfig>): LoggerAdapter {
 	return new LoggerAdapter(logger, config)
 }
 
@@ -283,13 +281,14 @@ export function normalizeLogger(logger: unknown): ILogger {
 				if (typeof logObj.child === 'function') {
 					return normalizeLogger((logObj.child as (obj: Record<string, unknown>) => unknown)(obj))
 				}
+
 				return normalizeLogger(logger)
 			},
 			trace: createLogMethod(logObj, 'trace'),
 			debug: createLogMethod(logObj, 'debug'),
 			info: createLogMethod(logObj, 'info'),
 			warn: createLogMethod(logObj, 'warn'),
-			error: createLogMethod(logObj, 'error'),
+			error: createLogMethod(logObj, 'error')
 		}
 	}
 
@@ -320,10 +319,7 @@ export function isILogger(obj: unknown): obj is ILogger {
 /**
  * Cria método de log genérico
  */
-function createLogMethod(
-	logger: Record<string, unknown>,
-	level: string
-): (obj: unknown, msg?: string) => void {
+function createLogMethod(logger: Record<string, unknown>, level: string): (obj: unknown, msg?: string) => void {
 	return (obj: unknown, msg?: string) => {
 		if (typeof logger[level] === 'function') {
 			;(logger[level] as (obj: unknown, msg?: string) => void)(obj, msg)
@@ -370,7 +366,7 @@ export function createConsoleLogger(prefix?: string): ILogger {
 		},
 		error(obj: unknown, msg?: string): void {
 			console.error(formatMessage('error', obj, msg))
-		},
+		}
 	}
 }
 

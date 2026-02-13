@@ -12,25 +12,25 @@
  */
 
 import type { ILogger } from './logger.js'
-import { StructuredLogger, createStructuredLogger, type LogLevel, type LogEntry } from './structured-logger.js'
+import { createStructuredLogger, type LogEntry, type LogLevel, StructuredLogger } from './structured-logger.js'
 
 /**
  * Baileys-specific log categories
  */
 export type BaileysLogCategory =
-	| 'connection'    // WebSocket connection events
-	| 'auth'          // Authentication and QR code
-	| 'message'       // Message send/receive
-	| 'media'         // Media upload/download
-	| 'group'         // Group operations
-	| 'presence'      // Presence status
-	| 'call'          // Voice/video calls
-	| 'sync'          // Data synchronization
-	| 'encryption'    // Encryption operations
-	| 'retry'         // Operation retries
-	| 'socket'        // Low-level socket events
-	| 'binary'        // Binary encoding/decoding
-	| 'unknown'       // Unknown category
+	| 'connection' // WebSocket connection events
+	| 'auth' // Authentication and QR code
+	| 'message' // Message send/receive
+	| 'media' // Media upload/download
+	| 'group' // Group operations
+	| 'presence' // Presence status
+	| 'call' // Voice/video calls
+	| 'sync' // Data synchronization
+	| 'encryption' // Encryption operations
+	| 'retry' // Operation retries
+	| 'socket' // Low-level socket events
+	| 'binary' // Binary encoding/decoding
+	| 'unknown' // Unknown category
 
 /**
  * Baileys Logger configuration
@@ -86,7 +86,7 @@ const CATEGORY_PATTERNS: Array<{ pattern: RegExp; category: BaileysLogCategory }
 	{ pattern: /sync|history|initial|full/i, category: 'sync' },
 	{ pattern: /encrypt|decrypt|signal|key|cipher/i, category: 'encryption' },
 	{ pattern: /retry|attempt|backoff|reconnect/i, category: 'retry' },
-	{ pattern: /binary|encode|decode|proto|buffer/i, category: 'binary' },
+	{ pattern: /binary|encode|decode|proto|buffer/i, category: 'binary' }
 ]
 
 /**
@@ -118,14 +118,14 @@ export class BaileysLogger implements ILogger {
 			logBinaryData: config.logBinaryData ?? false,
 			instanceId: config.instanceId || this.generateInstanceId(),
 			eventHandler: config.eventHandler || (() => {}),
-			maxPayloadSize: config.maxPayloadSize || 1024,
+			maxPayloadSize: config.maxPayloadSize || 1024
 		}
 
 		this.structuredLogger = createStructuredLogger({
 			level: this.config.level,
 			name: `baileys:${this.config.instanceId}`,
 			jsonFormat: process.env.NODE_ENV === 'production',
-			redactFields: ['password', 'token', 'secret', 'key', 'authKey', 'macKey'],
+			redactFields: ['password', 'token', 'secret', 'key', 'authKey', 'macKey']
 		})
 
 		this.metrics = this.createInitialMetrics()
@@ -159,8 +159,8 @@ export class BaileysLogger implements ILogger {
 				retry: 0,
 				socket: 0,
 				binary: 0,
-				unknown: 0,
-			},
+				unknown: 0
+			}
 		}
 	}
 
@@ -189,7 +189,7 @@ export class BaileysLogger implements ILogger {
 		const searchText = [
 			msg || '',
 			typeof obj === 'string' ? obj : '',
-			typeof obj === 'object' && obj !== null ? JSON.stringify(obj) : '',
+			typeof obj === 'object' && obj !== null ? JSON.stringify(obj) : ''
 		].join(' ')
 
 		for (const { pattern, category } of CATEGORY_PATTERNS) {
@@ -249,7 +249,7 @@ export class BaileysLogger implements ILogger {
 				return {
 					_truncated: true,
 					_originalSize: str.length,
-					_preview: str.substring(0, 200) + '...',
+					_preview: str.substring(0, 200) + '...'
 				}
 			}
 		}
@@ -273,6 +273,7 @@ export class BaileysLogger implements ILogger {
 				} else if (/fail|error|close/i.test(objStr)) {
 					this.metrics.connectionFailures++
 				}
+
 				break
 
 			case 'message':
@@ -283,6 +284,7 @@ export class BaileysLogger implements ILogger {
 					this.metrics.messagesReceived++
 					this.metrics.lastMessageTime = new Date().toISOString()
 				}
+
 				break
 
 			case 'media':
@@ -291,6 +293,7 @@ export class BaileysLogger implements ILogger {
 				} else if (/download/i.test(objStr)) {
 					this.metrics.mediaDownloads++
 				}
+
 				break
 
 			case 'retry':
@@ -328,12 +331,14 @@ export class BaileysLogger implements ILogger {
 			category,
 			instanceId: this.config.instanceId,
 			...this.childContext,
-			...(typeof sanitizedObj === 'object' && sanitizedObj !== null ? sanitizedObj : { value: sanitizedObj }),
+			...(typeof sanitizedObj === 'object' && sanitizedObj !== null ? sanitizedObj : { value: sanitizedObj })
 		}
 
 		// Structured log (skip if level is 'silent')
 		if (level !== 'silent') {
-			const logMethod = (this.structuredLogger as unknown as Record<string, ((obj: unknown, msg?: string) => void) | undefined>)[level]
+			const logMethod = (
+				this.structuredLogger as unknown as Record<string, ((obj: unknown, msg?: string) => void) | undefined>
+			)[level]
 			if (logMethod) {
 				logMethod.call(this.structuredLogger, enrichedObj, msg)
 			}
@@ -347,7 +352,7 @@ export class BaileysLogger implements ILogger {
 				levelValue: 0,
 				message: msg || '',
 				name: `baileys:${this.config.instanceId}`,
-				data: enrichedObj,
+				data: enrichedObj
 			}
 			this.config.eventHandler(category, entry)
 		}
@@ -384,12 +389,7 @@ export class BaileysLogger implements ILogger {
 	/**
 	 * Log message-specific event
 	 */
-	logMessage(
-		direction: 'send' | 'receive',
-		messageType: string,
-		jid: string,
-		details?: Record<string, unknown>
-	): void {
+	logMessage(direction: 'send' | 'receive', messageType: string, jid: string, details?: Record<string, unknown>): void {
 		const sanitizedJid = this.sanitizeJid(jid)
 		this.log(
 			'info',
@@ -398,7 +398,7 @@ export class BaileysLogger implements ILogger {
 				messageType,
 				jid: sanitizedJid,
 				...details,
-				category: 'message',
+				category: 'message'
 			},
 			`Message ${direction}: ${messageType}`
 		)
@@ -407,12 +407,7 @@ export class BaileysLogger implements ILogger {
 	/**
 	 * Log media-specific event
 	 */
-	logMedia(
-		operation: 'upload' | 'download',
-		mediaType: string,
-		size: number,
-		details?: Record<string, unknown>
-	): void {
+	logMedia(operation: 'upload' | 'download', mediaType: string, size: number, details?: Record<string, unknown>): void {
 		this.log(
 			'info',
 			{
@@ -421,7 +416,7 @@ export class BaileysLogger implements ILogger {
 				sizeBytes: size,
 				sizeFormatted: this.formatBytes(size),
 				...details,
-				category: 'media',
+				category: 'media'
 			},
 			`Media ${operation}: ${mediaType}`
 		)
@@ -440,6 +435,7 @@ export class BaileysLogger implements ILogger {
 				return `${localPart.substring(0, 4)}****@${domainPart}`
 			}
 		}
+
 		return jid
 	}
 
@@ -499,9 +495,10 @@ let defaultBaileysLogger: BaileysLogger | null = null
 export function getDefaultBaileysLogger(): BaileysLogger {
 	if (!defaultBaileysLogger) {
 		defaultBaileysLogger = createBaileysLogger({
-			level: 'info',
+			level: 'info'
 		})
 	}
+
 	return defaultBaileysLogger
 }
 
@@ -557,6 +554,7 @@ function safeStringify(value: unknown, seen: WeakSet<object> = new WeakSet()): s
 				const items = value.map(v => safeStringify(v, seen))
 				return `[${items.join(', ')}]`
 			}
+
 			return `[Array(${value.length})]`
 		}
 
@@ -571,6 +569,7 @@ function safeStringify(value: unknown, seen: WeakSet<object> = new WeakSet()): s
 				})
 				return `{${pairs.join(', ')}}`
 			}
+
 			return `{Object(${keys.length} keys)}`
 		} catch {
 			return '[Object]'
@@ -584,7 +583,7 @@ function safeStringify(value: unknown, seen: WeakSet<object> = new WeakSet()): s
  * Format data object for single-line or multi-line output
  * Handles circular references, Error objects, arrays, and undefined values
  */
-function formatLogData(data: Record<string, unknown>, singleLine: boolean = true): string {
+function formatLogData(data: Record<string, unknown>, singleLine = true): string {
 	if (!data || Object.keys(data).length === 0) return ''
 
 	const seen = new WeakSet<object>()
@@ -599,15 +598,21 @@ function formatLogData(data: Record<string, unknown>, singleLine: boolean = true
 
 	// Multi-line format - use safe replacer for JSON.stringify
 	try {
-		return JSON.stringify(data, (key, value) => {
-			if (value instanceof Error) {
-				return { name: value.name, message: value.message, stack: value.stack }
-			}
-			if (typeof value === 'bigint') {
-				return `${value}n`
-			}
-			return value
-		}, 2)
+		return JSON.stringify(
+			data,
+			(key, value) => {
+				if (value instanceof Error) {
+					return { name: value.name, message: value.message, stack: value.stack }
+				}
+
+				if (typeof value === 'bigint') {
+					return `${value}n`
+				}
+
+				return value
+			},
+			2
+		)
 	} catch {
 		// Fallback for circular references or other issues
 		return safeStringify(data, seen)
@@ -635,11 +640,7 @@ export type EventBufferLogType =
  * logEventBuffer('buffer_flush', { flushCount: 10, historyCacheSize: 5, mode: 'aggressive' })
  * // Output: [BAILEYS] 🔄 Event buffer flushed { flushCount: 10, historyCacheSize: 5, mode: 'aggressive' }
  */
-export function logEventBuffer(
-	type: EventBufferLogType,
-	data?: Record<string, unknown>,
-	sessionName?: string
-): void {
+export function logEventBuffer(type: EventBufferLogType, data?: Record<string, unknown>, sessionName?: string): void {
 	if (!isBaileysLogEnabled()) return
 
 	const prefix = sessionName ? `[BAILEYS] [${sessionName}]` : '[BAILEYS]'
@@ -711,6 +712,7 @@ export function logBufferMetrics(
 		console.log(`${prefix}     isHealthy: ${metrics.adaptive.isHealthy}`)
 		console.log(`${prefix}   }`)
 	}
+
 	console.log(`${prefix} }`)
 }
 
@@ -721,11 +723,7 @@ export function logBufferMetrics(
  * logMessageSent('3EB02FA562D6CCC0876CDE', '5511999999999@s.whatsapp.net')
  * // Output: [BAILEYS] 📤 Message sent: 3EB02FA562D6CCC0876CDE → 5511999999999@s.whatsapp.net
  */
-export function logMessageSent(
-	messageId: string,
-	recipientJid: string,
-	sessionName?: string
-): void {
+export function logMessageSent(messageId: string, recipientJid: string, sessionName?: string): void {
 	if (!isBaileysLogEnabled()) return
 
 	const prefix = sessionName ? `[BAILEYS] [${sessionName}]` : '[BAILEYS]'
@@ -739,11 +737,7 @@ export function logMessageSent(
  * logMessageReceived('A5E0349897A3F16F3F2778EEF94A065F', '238315571802285@lid')
  * // Output: [BAILEYS] 📥 Message received: A5E0349897A3F16F3F2778EEF94A065F ← 238315571802285@lid
  */
-export function logMessageReceived(
-	messageId: string,
-	senderJid: string,
-	sessionName?: string
-): void {
+export function logMessageReceived(messageId: string, senderJid: string, sessionName?: string): void {
 	if (!isBaileysLogEnabled()) return
 
 	const prefix = sessionName ? `[BAILEYS] [${sessionName}]` : '[BAILEYS]'

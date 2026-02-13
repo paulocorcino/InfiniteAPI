@@ -70,7 +70,10 @@ describe('LIDMappingStore', () => {
 			const lidTwo = '44444:99@hosted.lid'
 
 			// @ts-ignore
-			mockKeys.get.mockResolvedValue({ '33333_reverse': '77777', '44444_reverse': '88888' } as SignalDataTypeMap['lid-mapping'])
+			mockKeys.get.mockResolvedValue({
+				'33333_reverse': '77777',
+				'44444_reverse': '88888'
+			} as SignalDataTypeMap['lid-mapping'])
 
 			const result = await lidMappingStore.getPNsForLIDs([lidOne, lidTwo])
 
@@ -96,7 +99,9 @@ describe('LIDMappingStore', () => {
 			mockKeys.get.mockResolvedValue({ '12345': lidUser } as SignalDataTypeMap['lid-mapping'])
 
 			// Make 10 concurrent calls for the same PN
-			const promises = Array(10).fill(null).map(() => lidMappingStore.getLIDForPN(pn))
+			const promises = Array(10)
+				.fill(null)
+				.map(() => lidMappingStore.getLIDForPN(pn))
 
 			// All should resolve to same result
 			const results = await Promise.all(promises)
@@ -115,7 +120,9 @@ describe('LIDMappingStore', () => {
 			mockKeys.get.mockResolvedValue({ '54321_reverse': pnUser } as SignalDataTypeMap['lid-mapping'])
 
 			// Make 10 concurrent calls for the same LID
-			const promises = Array(10).fill(null).map(() => lidMappingStore.getPNForLID(lid))
+			const promises = Array(10)
+				.fill(null)
+				.map(() => lidMappingStore.getPNForLID(lid))
 
 			// All should resolve to same result
 			const results = await Promise.all(promises)
@@ -133,10 +140,7 @@ describe('LIDMappingStore', () => {
 			mockKeys.get.mockResolvedValue({ '11111': 'aaaaa', '22222': 'bbbbb' } as SignalDataTypeMap['lid-mapping'])
 
 			// Concurrent calls for DIFFERENT PNs
-			const [result1, result2] = await Promise.all([
-				lidMappingStore.getLIDForPN(pn1),
-				lidMappingStore.getLIDForPN(pn2)
-			])
+			const [result1, result2] = await Promise.all([lidMappingStore.getLIDForPN(pn1), lidMappingStore.getLIDForPN(pn2)])
 
 			expect(result1).toBe('aaaaa@lid')
 			expect(result2).toBe('bbbbb@lid')
@@ -155,14 +159,15 @@ describe('LIDMappingStore', () => {
 			lidMappingStore.destroy()
 
 			// All operations should throw after destroy
-			await expect(lidMappingStore.getLIDForPN('12345@s.whatsapp.net'))
-				.rejects.toThrow('LIDMappingStore has been destroyed')
+			await expect(lidMappingStore.getLIDForPN('12345@s.whatsapp.net')).rejects.toThrow(
+				'LIDMappingStore has been destroyed'
+			)
 
-			await expect(lidMappingStore.getPNForLID('54321@lid'))
-				.rejects.toThrow('LIDMappingStore has been destroyed')
+			await expect(lidMappingStore.getPNForLID('54321@lid')).rejects.toThrow('LIDMappingStore has been destroyed')
 
-			await expect(lidMappingStore.storeLIDPNMappings([{ lid: 'a@lid', pn: 'b@s.whatsapp.net' }]))
-				.rejects.toThrow('LIDMappingStore has been destroyed')
+			await expect(lidMappingStore.storeLIDPNMappings([{ lid: 'a@lid', pn: 'b@s.whatsapp.net' }])).rejects.toThrow(
+				'LIDMappingStore has been destroyed'
+			)
 		})
 
 		it('should allow destroy() to be called multiple times safely', () => {
@@ -208,8 +213,7 @@ describe('LIDMappingStore', () => {
 			expect(operationCompleted).toBe(true)
 
 			// But new operations should be rejected
-			await expect(lidMappingStore.getLIDForPN(pn))
-				.rejects.toThrow('LIDMappingStore has been destroyed')
+			await expect(lidMappingStore.getLIDForPN(pn)).rejects.toThrow('LIDMappingStore has been destroyed')
 		})
 	})
 
@@ -286,15 +290,13 @@ describe('LIDMappingStore', () => {
 			mockKeys.get.mockResolvedValue({ '12345': 'aaaaa' } as SignalDataTypeMap['lid-mapping'])
 
 			const result = await lidMappingStore.getLIDsForPNs([
-				'12345@s.whatsapp.net',  // Valid
-				'invalid',                 // Invalid
-				'67890@s.whatsapp.net'    // Valid but not in DB
+				'12345@s.whatsapp.net', // Valid
+				'invalid', // Invalid
+				'67890@s.whatsapp.net' // Valid but not in DB
 			])
 
 			// Should only return valid results
-			expect(result).toEqual([
-				{ pn: '12345@s.whatsapp.net', lid: 'aaaaa@lid' }
-			])
+			expect(result).toEqual([{ pn: '12345@s.whatsapp.net', lid: 'aaaaa@lid' }])
 		})
 	})
 })

@@ -14,8 +14,8 @@
  */
 
 import { EventEmitter } from 'events'
-import { metrics } from './prometheus-metrics.js'
 import type { BaileysLogCategory } from './baileys-logger.js'
+import { metrics } from './prometheus-metrics.js'
 
 /**
  * Baileys event types
@@ -56,7 +56,7 @@ const PRIORITY_VALUES: Record<EventPriority, number> = {
 	critical: 0,
 	high: 1,
 	normal: 2,
-	low: 3,
+	low: 3
 }
 
 /**
@@ -160,9 +160,9 @@ const EVENT_CATEGORY_MAP: Record<string, BaileysLogCategory> = {
 	'presence.update': 'presence',
 	'chats.update': 'message',
 	'chats.delete': 'message',
-	'call': 'call',
+	call: 'call',
 	'blocklist.set': 'sync',
-	'blocklist.update': 'sync',
+	'blocklist.update': 'sync'
 }
 
 /**
@@ -173,9 +173,9 @@ const EVENT_PRIORITY_MAP: Partial<Record<BaileysEventType, EventPriority>> = {
 	'creds.update': 'critical',
 	'messages.upsert': 'high',
 	'messages.update': 'high',
-	'call': 'high',
+	call: 'high',
 	'presence.update': 'low',
-	'messaging-history.set': 'normal',
+	'messaging-history.set': 'normal'
 }
 
 /**
@@ -213,7 +213,7 @@ export class BaileysEventStream extends EventEmitter {
 			maxRetries: options.maxRetries ?? 3,
 			deadLetterQueueSize: options.deadLetterQueueSize ?? 1000,
 			collectMetrics: options.collectMetrics ?? true,
-			streamName: options.streamName ?? 'baileys',
+			streamName: options.streamName ?? 'baileys'
 		}
 
 		this.stats = this.createInitialStats()
@@ -238,15 +238,19 @@ export class BaileysEventStream extends EventEmitter {
 				critical: 0,
 				high: 0,
 				normal: 0,
-				low: 0,
-			},
+				low: 0
+			}
 		}
 	}
 
 	/**
 	 * Add event to stream
 	 */
-	push<T>(type: BaileysEventType, data: T, options?: { priority?: EventPriority; metadata?: Record<string, unknown> }): boolean {
+	push<T>(
+		type: BaileysEventType,
+		data: T,
+		options?: { priority?: EventPriority; metadata?: Record<string, unknown> }
+	): boolean {
 		// Check backpressure
 		if (this.options.enableBackpressure && this.buffer.length >= this.options.highWaterMark) {
 			this.stats.isBackpressured = true
@@ -272,7 +276,7 @@ export class BaileysEventStream extends EventEmitter {
 			priority: options?.priority || EVENT_PRIORITY_MAP[type] || 'normal',
 			category: EVENT_CATEGORY_MAP[type] || 'unknown',
 			metadata: options?.metadata,
-			retryCount: 0,
+			retryCount: 0
 		}
 
 		// Apply transformers
@@ -334,9 +338,18 @@ export class BaileysEventStream extends EventEmitter {
 	/**
 	 * Register handler for event type
 	 */
-	on<T = unknown>(event: BaileysEventType | '*' | 'backpressure' | 'drain' | 'dropped' | 'batch-processed' | 'retry', handler: EventHandler<T>): this {
+	on<T = unknown>(
+		event: BaileysEventType | '*' | 'backpressure' | 'drain' | 'dropped' | 'batch-processed' | 'retry',
+		handler: EventHandler<T>
+	): this {
 		// For control events (backpressure, drain, etc), use native EventEmitter
-		if (event === 'backpressure' || event === 'drain' || event === 'dropped' || event === 'batch-processed' || event === 'retry') {
+		if (
+			event === 'backpressure' ||
+			event === 'drain' ||
+			event === 'dropped' ||
+			event === 'batch-processed' ||
+			event === 'retry'
+		) {
 			super.on(event, handler as any)
 			return this
 		}
@@ -345,6 +358,7 @@ export class BaileysEventStream extends EventEmitter {
 		if (!this.handlers.has(event)) {
 			this.handlers.set(event, new Set())
 		}
+
 		this.handlers.get(event)!.add(handler as EventHandler)
 		return this
 	}
@@ -352,9 +366,18 @@ export class BaileysEventStream extends EventEmitter {
 	/**
 	 * Remove handler
 	 */
-	off(event: BaileysEventType | '*' | 'backpressure' | 'drain' | 'dropped' | 'batch-processed' | 'retry', handler: EventHandler): this {
+	off(
+		event: BaileysEventType | '*' | 'backpressure' | 'drain' | 'dropped' | 'batch-processed' | 'retry',
+		handler: EventHandler
+	): this {
 		// For control events, use native EventEmitter
-		if (event === 'backpressure' || event === 'drain' || event === 'dropped' || event === 'batch-processed' || event === 'retry') {
+		if (
+			event === 'backpressure' ||
+			event === 'drain' ||
+			event === 'dropped' ||
+			event === 'batch-processed' ||
+			event === 'retry'
+		) {
 			super.off(event, handler as any)
 			return this
 		}
@@ -364,6 +387,7 @@ export class BaileysEventStream extends EventEmitter {
 		if (handlers) {
 			handlers.delete(handler)
 		}
+
 		return this
 	}
 
@@ -371,10 +395,11 @@ export class BaileysEventStream extends EventEmitter {
 	 * Register single-use handler
 	 */
 	once<T = unknown>(event: BaileysEventType, handler: EventHandler<T>): this {
-		const wrappedHandler: EventHandler<T> = (e) => {
+		const wrappedHandler: EventHandler<T> = e => {
 			this.off(event, wrappedHandler as EventHandler)
 			return handler(e)
 		}
+
 		return this.on(event, wrappedHandler)
 	}
 
@@ -394,6 +419,7 @@ export class BaileysEventStream extends EventEmitter {
 		if (index !== -1) {
 			this.filters.splice(index, 1)
 		}
+
 		return this
 	}
 
@@ -510,8 +536,8 @@ export class BaileysEventStream extends EventEmitter {
 				...event.metadata,
 				error: error.message,
 				errorStack: error.stack,
-				movedToDlqAt: Date.now(),
-			},
+				movedToDlqAt: Date.now()
+			}
 		}
 
 		this.deadLetterQueue.push(dlqEvent)
@@ -554,7 +580,7 @@ export class BaileysEventStream extends EventEmitter {
 		return {
 			processed,
 			failed,
-			duration: Date.now() - startTime,
+			duration: Date.now() - startTime
 		}
 	}
 
@@ -636,7 +662,7 @@ export class BaileysEventStream extends EventEmitter {
 		return {
 			processed,
 			failed,
-			duration: Date.now() - startTime,
+			duration: Date.now() - startTime
 		}
 	}
 
@@ -663,6 +689,7 @@ export class BaileysEventStream extends EventEmitter {
 		if (this.flushTimer) {
 			clearInterval(this.flushTimer)
 		}
+
 		this.buffer = []
 		this.deadLetterQueue = []
 		this.handlers.clear()
@@ -686,38 +713,38 @@ export const eventFilters = {
 	/** Filter by event type */
 	byType:
 		(...types: BaileysEventType[]): EventFilter =>
-			(event) =>
-				types.includes(event.type),
+		event =>
+			types.includes(event.type),
 
 	/** Filter by category */
 	byCategory:
 		(...categories: BaileysLogCategory[]): EventFilter =>
-			(event) =>
-				categories.includes(event.category),
+		event =>
+			categories.includes(event.category),
 
 	/** Filter by minimum priority */
 	byMinPriority:
 		(minPriority: EventPriority): EventFilter =>
-			(event) =>
-				PRIORITY_VALUES[event.priority] <= PRIORITY_VALUES[minPriority],
+		event =>
+			PRIORITY_VALUES[event.priority] <= PRIORITY_VALUES[minPriority],
 
 	/** Filter recent events (within ms) */
 	recentOnly:
 		(maxAgeMs: number): EventFilter =>
-			(event) =>
-				Date.now() - event.timestamp <= maxAgeMs,
+		event =>
+			Date.now() - event.timestamp <= maxAgeMs,
 
 	/** Combine filters with AND */
 	and:
 		(...filters: EventFilter[]): EventFilter =>
-			(event) =>
-				filters.every((f) => f(event)),
+		event =>
+			filters.every(f => f(event)),
 
 	/** Combine filters with OR */
 	or:
 		(...filters: EventFilter[]): EventFilter =>
-			(event) =>
-				filters.some((f) => f(event)),
+		event =>
+			filters.some(f => f(event))
 }
 
 /**
@@ -725,32 +752,30 @@ export const eventFilters = {
  */
 export const eventTransformers = {
 	/** Add processing timestamp */
-	addProcessingTimestamp: (): EventTransformer => (event) => ({
+	addProcessingTimestamp: (): EventTransformer => event => ({
 		...event,
 		metadata: {
 			...event.metadata,
-			processingTimestamp: Date.now(),
-		},
+			processingTimestamp: Date.now()
+		}
 	}),
 
 	/** Add trace ID */
 	addTraceId:
 		(traceIdGenerator: () => string): EventTransformer =>
-			(event) => ({
-				...event,
-				metadata: {
-					...event.metadata,
-					traceId: traceIdGenerator(),
-				},
-			}),
+		event => ({
+			...event,
+			metadata: {
+				...event.metadata,
+				traceId: traceIdGenerator()
+			}
+		}),
 
 	/** Elevate priority based on condition */
 	elevatepriorityIf:
 		(condition: (event: StreamEvent) => boolean, newPriority: EventPriority): EventTransformer =>
-			(event) =>
-				condition(event)
-					? { ...event, priority: newPriority }
-					: event,
+		event =>
+			condition(event) ? { ...event, priority: newPriority } : event
 }
 
 export default BaileysEventStream

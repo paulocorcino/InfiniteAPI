@@ -126,10 +126,7 @@ export async function handleIdentityChange(
 	// Skip companion devices - they don't need session refresh
 	const decoded = jidDecode(from)
 	if (decoded?.device && decoded.device !== 0) {
-		ctx.logger.debug(
-			{ jid: from, device: decoded.device },
-			'ignoring identity change from companion device'
-		)
+		ctx.logger.debug({ jid: from, device: decoded.device }, 'ignoring identity change from companion device')
 		return { action: 'skipped_companion_device', device: decoded.device }
 	}
 
@@ -178,10 +175,7 @@ export async function handleIdentityChange(
 		await ctx.assertSessions([from], true)
 		return { action: 'session_refreshed', hadExistingSession: hasExistingSession.exists }
 	} catch (error) {
-		ctx.logger.warn(
-			{ error, jid: from },
-			'failed to assert sessions after identity change'
-		)
+		ctx.logger.warn({ error, jid: from }, 'failed to assert sessions after identity change')
 		return { action: 'session_refresh_failed', error }
 	}
 }

@@ -88,7 +88,7 @@ export class Cache<V = unknown> {
 			namespace: options.namespace ?? 'default',
 			onExpire: options.onExpire ?? (() => {}),
 			collectMetrics: options.collectMetrics ?? true,
-			metricName: options.metricName ?? 'cache',
+			metricName: options.metricName ?? 'cache'
 		}
 
 		this.namespace = this.options.namespace
@@ -98,10 +98,10 @@ export class Cache<V = unknown> {
 			max: this.options.maxSize,
 			ttl: this.options.ttl,
 			updateAgeOnGet: this.options.updateAgeOnGet,
-			sizeCalculation: (item) => this.options.sizeCalculation(item.value),
+			sizeCalculation: item => this.options.sizeCalculation(item.value),
 			dispose: (value, key) => {
 				this.options.onExpire(key, value.value)
-			},
+			}
 		})
 	}
 
@@ -151,7 +151,7 @@ export class Cache<V = unknown> {
 			return {
 				value: item.value,
 				hit: true,
-				key,
+				key
 			}
 		}
 
@@ -163,7 +163,7 @@ export class Cache<V = unknown> {
 		return {
 			value: undefined,
 			hit: false,
-			key,
+			key
 		}
 	}
 
@@ -180,7 +180,7 @@ export class Cache<V = unknown> {
 			createdAt: now,
 			expiresAt: now + itemTtl,
 			accessCount: 0,
-			lastAccess: now,
+			lastAccess: now
 		}
 
 		this.cache.set(fullKey, item, { ttl: itemTtl })
@@ -291,7 +291,7 @@ export class Cache<V = unknown> {
 			misses: this.stats.misses,
 			size: this.cache.size,
 			maxSize: this.options.maxSize,
-			hitRate: total > 0 ? this.stats.hits / total : 0,
+			hitRate: total > 0 ? this.stats.hits / total : 0
 		}
 	}
 
@@ -307,14 +307,14 @@ export class Cache<V = unknown> {
 	 */
 	keys(): string[] {
 		const prefix = `${this.namespace}:`
-		return Array.from(this.cache.keys()).map((k) => (k.startsWith(prefix) ? k.slice(prefix.length) : k))
+		return Array.from(this.cache.keys()).map(k => (k.startsWith(prefix) ? k.slice(prefix.length) : k))
 	}
 
 	/**
 	 * Return all values
 	 */
 	values(): V[] {
-		return Array.from(this.cache.values()).map((item) => item.value)
+		return Array.from(this.cache.values()).map(item => item.value)
 	}
 
 	/**
@@ -324,7 +324,7 @@ export class Cache<V = unknown> {
 		const prefix = `${this.namespace}:`
 		return Array.from(this.cache.entries()).map(([key, item]) => ({
 			key: key.startsWith(prefix) ? key.slice(prefix.length) : key,
-			item,
+			item
 		}))
 	}
 
@@ -468,7 +468,7 @@ export function cached<V>(options: CacheOptions<V> & { keyGenerator?: (...args: 
 /**
  * Wrapper for function with cache
  */
-export function withCache<T extends (...args: unknown[]) => unknown>(
+export function withCache<T extends(...args: unknown[]) => unknown>(
 	fn: T,
 	options: CacheOptions<ReturnType<T>> & { keyGenerator?: (...args: Parameters<T>) => string } = {}
 ): T {
@@ -486,7 +486,7 @@ export function withCache<T extends (...args: unknown[]) => unknown>(
 		const result = fn(...args) as ReturnType<T>
 
 		if (result instanceof Promise) {
-			return result.then((value) => {
+			return result.then(value => {
 				cache.set(key, value as ReturnType<T>)
 				return value
 			}) as ReturnType<T>
@@ -505,8 +505,9 @@ const globalCaches: Map<string, Cache<any>> = new Map()
 
 export function getGlobalCache<V>(namespace: string, options?: CacheOptions<V>): Cache<V> {
 	if (!globalCaches.has(namespace)) {
-		globalCaches.set(namespace, new Cache<V>({ ...options, namespace }) as Cache<V>)
+		globalCaches.set(namespace, new Cache<V>({ ...options, namespace }))
 	}
+
 	return globalCaches.get(namespace) as Cache<V>
 }
 
@@ -514,6 +515,7 @@ export function clearGlobalCaches(): void {
 	for (const cache of globalCaches.values()) {
 		cache.clear()
 	}
+
 	globalCaches.clear()
 }
 

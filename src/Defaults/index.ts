@@ -257,7 +257,7 @@ export const TimeMs = {
 	/** One day in milliseconds (86,400,000) */
 	Day: 86_400_000,
 	/** One week in milliseconds (604,800,000) */
-	Week: 604_800_000,
+	Week: 604_800_000
 } as const
 
 export type TimeMsKey = keyof typeof TimeMs

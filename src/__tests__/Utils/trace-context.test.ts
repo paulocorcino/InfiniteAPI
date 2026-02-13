@@ -2,36 +2,36 @@
  * Testes unitários para trace-context.ts
  */
 
-import { describe, it, expect, beforeEach } from '@jest/globals'
+import { beforeEach, describe, expect, it } from '@jest/globals'
 import {
+	addSpanEvent,
+	createPrecisionTimer,
+	createSpan,
 	createTraceContext,
+	endSpan,
+	exportContext,
+	extractTraceHeaders,
+	generateCorrelationId,
+	generateSpanId,
+	generateTraceId,
+	getAllBaggage,
+	getBaggage,
 	getCurrentContext,
 	getOrCreateContext,
+	importContext,
+	injectTraceHeaders,
+	removeBaggage,
 	runWithContext,
 	runWithNewContext,
-	createSpan,
-	startSpan,
-	endSpan,
-	addSpanEvent,
+	setBaggage,
 	setSpanAttributes,
 	setSpanError,
-	withSpan,
-	withSpanSync,
-	setBaggage,
-	getBaggage,
-	getAllBaggage,
-	removeBaggage,
-	injectTraceHeaders,
-	extractTraceHeaders,
-	exportContext,
-	importContext,
-	createPrecisionTimer,
-	generateTraceId,
-	generateSpanId,
-	generateCorrelationId,
+	type Span,
+	startSpan,
 	TRACE_HEADERS,
 	type TraceContext,
-	type Span,
+	withSpan,
+	withSpanSync
 } from '../../Utils/trace-context.js'
 
 describe('ID generation', () => {
@@ -47,6 +47,7 @@ describe('ID generation', () => {
 			for (let i = 0; i < 100; i++) {
 				ids.add(generateTraceId())
 			}
+
 			expect(ids.size).toBe(100)
 		})
 	})
@@ -85,7 +86,7 @@ describe('TraceContext', () => {
 				correlationId: 'custom-corr-id',
 				parentSpanId: 'parent-span',
 				baggage: { key: 'value' },
-				metadata: { env: 'test' },
+				metadata: { env: 'test' }
 			})
 
 			expect(context.traceIds.traceId).toBe('custom-trace-id')
@@ -174,7 +175,7 @@ describe('Spans', () => {
 		it('should include provided attributes', () => {
 			const span = createSpan({
 				name: 'test',
-				attributes: { key: 'value', count: 42 },
+				attributes: { key: 'value', count: 42 }
 			})
 
 			expect(span.attributes).toEqual({ key: 'value', count: 42 })
@@ -287,7 +288,7 @@ describe('Spans', () => {
 			expect(span.status).toBe('error')
 			expect(span.attributes.error).toBe(true)
 			expect(span.attributes.errorMessage).toBe('Something went wrong')
-			expect(span.events.some((e) => e.name === 'exception')).toBe(true)
+			expect(span.events.some(e => e.name === 'exception')).toBe(true)
 		})
 	})
 })
@@ -295,7 +296,7 @@ describe('Spans', () => {
 describe('withSpan helpers', () => {
 	describe('withSpan', () => {
 		it('should execute async operation within span', async () => {
-			const result = await withSpan('async-op', async (span) => {
+			const result = await withSpan('async-op', async span => {
 				expect(span.name).toBe('async-op')
 				return 'async-result'
 			})
@@ -314,7 +315,7 @@ describe('withSpan helpers', () => {
 
 	describe('withSpanSync', () => {
 		it('should execute sync operation within span', () => {
-			const result = withSpanSync('sync-op', (span) => {
+			const result = withSpanSync('sync-op', span => {
 				expect(span.name).toBe('sync-op')
 				return 'sync-result'
 			})
@@ -364,7 +365,7 @@ describe('Header injection/extraction', () => {
 	describe('injectTraceHeaders', () => {
 		it('should inject trace headers', () => {
 			const context = createTraceContext({
-				baggage: { user: 'test' },
+				baggage: { user: 'test' }
 			})
 
 			const headers = runWithContext(context, () => {
@@ -394,7 +395,7 @@ describe('Header injection/extraction', () => {
 				[TRACE_HEADERS.TRACE_ID]: 'trace-123',
 				[TRACE_HEADERS.PARENT_SPAN_ID]: 'parent-456',
 				[TRACE_HEADERS.CORRELATION_ID]: 'corr-789',
-				[TRACE_HEADERS.BAGGAGE]: 'key1=value1,key2=value2',
+				[TRACE_HEADERS.BAGGAGE]: 'key1=value1,key2=value2'
 			}
 
 			const options = extractTraceHeaders(headers)
@@ -412,7 +413,7 @@ describe('Context serialization', () => {
 		it('should serialize context to JSON string', () => {
 			const context = createTraceContext({
 				baggage: { key: 'value' },
-				metadata: { env: 'test' },
+				metadata: { env: 'test' }
 			})
 
 			const exported = exportContext(context)
@@ -430,10 +431,10 @@ describe('Context serialization', () => {
 				traceIds: {
 					traceId: 'trace-123',
 					spanId: 'span-456',
-					correlationId: 'corr-789',
+					correlationId: 'corr-789'
 				},
 				baggage: { imported: 'value' },
-				metadata: { source: 'external' },
+				metadata: { source: 'external' }
 			})
 
 			const options = importContext(serialized)
@@ -455,7 +456,7 @@ describe('PrecisionTimer', () => {
 	it('should measure elapsed time', async () => {
 		const timer = createPrecisionTimer()
 
-		await new Promise((resolve) => setTimeout(resolve, 20))
+		await new Promise(resolve => setTimeout(resolve, 20))
 
 		const elapsed = timer.elapsed()
 		expect(elapsed).toBeGreaterThan(10)
@@ -464,7 +465,7 @@ describe('PrecisionTimer', () => {
 	it('should format elapsed time', async () => {
 		const timer = createPrecisionTimer()
 
-		await new Promise((resolve) => setTimeout(resolve, 5))
+		await new Promise(resolve => setTimeout(resolve, 5))
 
 		const formatted = timer.elapsedFormatted()
 		expect(formatted).toMatch(/\d+(\.\d+)?(µs|ms|s)/)
@@ -473,11 +474,11 @@ describe('PrecisionTimer', () => {
 	it('should stop timer', async () => {
 		const timer = createPrecisionTimer()
 
-		await new Promise((resolve) => setTimeout(resolve, 10))
+		await new Promise(resolve => setTimeout(resolve, 10))
 
 		const stopped = timer.stop()
 
-		await new Promise((resolve) => setTimeout(resolve, 20))
+		await new Promise(resolve => setTimeout(resolve, 20))
 
 		const afterStop = timer.elapsed()
 

@@ -1,6 +1,6 @@
+import Long from 'long'
 import type { Readable } from 'stream'
 import type { URL } from 'url'
-import Long from 'long'
 import { proto } from '../../WAProto/index.js'
 import type { MediaType } from '../Defaults'
 import type { BinaryNode } from '../WABinary'
@@ -259,7 +259,9 @@ export type AnyMediaMessageContent = (
 			fileName?: string
 			caption?: string
 	  } & Contextable)
-) & { mimetype?: string } & Editable & Partial<Buttonable> & Partial<Templatable>
+) & { mimetype?: string } & Editable &
+	Partial<Buttonable> &
+	Partial<Templatable>
 
 export type ButtonReplyInfo = {
 	displayText: string

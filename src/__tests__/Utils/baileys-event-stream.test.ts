@@ -2,15 +2,14 @@
  * Testes unitários para baileys-event-stream.ts
  */
 
-import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals'
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import {
 	BaileysEventStream,
 	createEventStream,
 	eventFilters,
-	eventTransformers,
-	type StreamEvent,
-	type BaileysEventType,
 	type EventPriority,
+	eventTransformers,
+	type StreamEvent
 } from '../../Utils/baileys-event-stream.js'
 
 describe('BaileysEventStream', () => {
@@ -20,7 +19,7 @@ describe('BaileysEventStream', () => {
 		stream = createEventStream({
 			maxBufferSize: 100,
 			batchSize: 10,
-			collectMetrics: false,
+			collectMetrics: false
 		})
 	})
 
@@ -36,8 +35,8 @@ describe('BaileysEventStream', () => {
 			expect(stream.getStats().bufferSize).toBeGreaterThan(0)
 		})
 
-		it('should assign priority based on event type', (done) => {
-			stream.on('*', (event) => {
+		it('should assign priority based on event type', done => {
+			stream.on('*', event => {
 				expect(event.priority).toBe('critical')
 				done()
 			})
@@ -45,8 +44,8 @@ describe('BaileysEventStream', () => {
 			stream.push('connection.update', { state: 'open' })
 		})
 
-		it('should use custom priority when provided', (done) => {
-			stream.on('*', (event) => {
+		it('should use custom priority when provided', done => {
+			stream.on('*', event => {
 				expect(event.priority).toBe('low')
 				done()
 			})
@@ -54,8 +53,8 @@ describe('BaileysEventStream', () => {
 			stream.push('messages.upsert', { message: 'test' }, { priority: 'low' })
 		})
 
-		it('should assign correct category', (done) => {
-			stream.on('*', (event) => {
+		it('should assign correct category', done => {
+			stream.on('*', event => {
 				expect(event.category).toBe('message')
 				done()
 			})
@@ -68,7 +67,7 @@ describe('BaileysEventStream', () => {
 				maxBufferSize: 5,
 				enableBackpressure: true,
 				highWaterMark: 3,
-				collectMetrics: false,
+				collectMetrics: false
 			})
 
 			smallStream.pause() // Prevent processing
@@ -94,7 +93,7 @@ describe('BaileysEventStream', () => {
 			stream.push('messages.upsert', { message: 'test' })
 
 			// Wait for processing
-			await new Promise((resolve) => setTimeout(resolve, 50))
+			await new Promise(resolve => setTimeout(resolve, 50))
 
 			expect(handler).toHaveBeenCalledTimes(1)
 		})
@@ -106,7 +105,7 @@ describe('BaileysEventStream', () => {
 			stream.push('messages.upsert', { message: 'test' })
 			stream.push('connection.update', { state: 'open' })
 
-			await new Promise((resolve) => setTimeout(resolve, 50))
+			await new Promise(resolve => setTimeout(resolve, 50))
 
 			expect(handler).toHaveBeenCalledTimes(2)
 		})
@@ -118,7 +117,7 @@ describe('BaileysEventStream', () => {
 			stream.push('messages.upsert', { first: true })
 			stream.push('messages.upsert', { second: true })
 
-			await new Promise((resolve) => setTimeout(resolve, 50))
+			await new Promise(resolve => setTimeout(resolve, 50))
 
 			expect(handler).toHaveBeenCalledTimes(1)
 		})
@@ -130,7 +129,7 @@ describe('BaileysEventStream', () => {
 			stream.off('messages.upsert', handler)
 			stream.push('messages.upsert', { message: 'test' })
 
-			await new Promise((resolve) => setTimeout(resolve, 50))
+			await new Promise(resolve => setTimeout(resolve, 50))
 
 			expect(handler).not.toHaveBeenCalled()
 		})
@@ -147,7 +146,7 @@ describe('BaileysEventStream', () => {
 
 			stream.push('messages.upsert', { message: 'test' })
 
-			await new Promise((resolve) => setTimeout(resolve, 50))
+			await new Promise(resolve => setTimeout(resolve, 50))
 
 			expect(handler).not.toHaveBeenCalled()
 		})
@@ -160,7 +159,7 @@ describe('BaileysEventStream', () => {
 			stream.push('messages.upsert', { message: 'test' })
 			stream.resume()
 
-			await new Promise((resolve) => setTimeout(resolve, 50))
+			await new Promise(resolve => setTimeout(resolve, 50))
 
 			expect(handler).toHaveBeenCalled()
 		})
@@ -189,13 +188,13 @@ describe('BaileysEventStream', () => {
 		it('should filter events before processing', async () => {
 			const handler = jest.fn() as any
 
-			stream.addFilter((event) => (event.data as any).include === true)
+			stream.addFilter(event => (event.data as any).include === true)
 			stream.on('*', handler)
 
 			stream.push('messages.upsert', { include: true })
 			stream.push('messages.upsert', { include: false })
 
-			await new Promise((resolve) => setTimeout(resolve, 50))
+			await new Promise(resolve => setTimeout(resolve, 50))
 
 			expect(handler).toHaveBeenCalledTimes(1)
 		})
@@ -211,7 +210,7 @@ describe('BaileysEventStream', () => {
 
 			stream.push('messages.upsert', { test: true })
 
-			await new Promise((resolve) => setTimeout(resolve, 50))
+			await new Promise(resolve => setTimeout(resolve, 50))
 
 			expect(handler).toHaveBeenCalled()
 		})
@@ -219,19 +218,19 @@ describe('BaileysEventStream', () => {
 
 	describe('transformers', () => {
 		it('should transform events before processing', async () => {
-			stream.addTransformer((event) => ({
+			stream.addTransformer(event => ({
 				...event,
-				metadata: { ...event.metadata, transformed: true },
+				metadata: { ...event.metadata, transformed: true }
 			}))
 
 			let receivedEvent: StreamEvent | null = null
-			stream.on('*', (event) => {
+			stream.on('*', event => {
 				receivedEvent = event
 			})
 
 			stream.push('messages.upsert', { message: 'test' })
 
-			await new Promise((resolve) => setTimeout(resolve, 50))
+			await new Promise(resolve => setTimeout(resolve, 50))
 
 			expect((receivedEvent as any)?.metadata?.transformed).toBe(true)
 		})
@@ -246,13 +245,13 @@ describe('BaileysEventStream', () => {
 			const dlqStream = createEventStream({
 				maxRetries: 2,
 				batchSize: 1,
-				collectMetrics: false,
+				collectMetrics: false
 			})
 
 			dlqStream.on('messages.upsert', failingHandler)
 			dlqStream.push('messages.upsert', { will: 'fail' })
 
-			await new Promise((resolve) => setTimeout(resolve, 200))
+			await new Promise(resolve => setTimeout(resolve, 200))
 
 			const dlq = dlqStream.getDeadLetterQueue()
 			expect(dlq.length).toBeGreaterThan(0)
@@ -280,7 +279,7 @@ describe('BaileysEventStream', () => {
 			stream.push('connection.update', { b: 2 })
 			stream.push('messages.update', { c: 3 })
 
-			await new Promise((resolve) => setTimeout(resolve, 50))
+			await new Promise(resolve => setTimeout(resolve, 50))
 
 			const stats = stream.getStats()
 
@@ -294,7 +293,7 @@ describe('BaileysEventStream', () => {
 			stream.on('*', () => {})
 			stream.push('messages.upsert', { test: true })
 
-			await new Promise((resolve) => setTimeout(resolve, 50))
+			await new Promise(resolve => setTimeout(resolve, 50))
 
 			stream.resetStats()
 
@@ -310,7 +309,7 @@ describe('BaileysEventStream', () => {
 
 			stream.pause()
 
-			stream.on('*', (event) => {
+			stream.on('*', event => {
 				processedOrder.push(event.priority)
 			})
 
@@ -331,12 +330,12 @@ describe('BaileysEventStream', () => {
 	})
 
 	describe('backpressure', () => {
-		it('should emit backpressure event when high water mark reached', (done) => {
+		it('should emit backpressure event when high water mark reached', done => {
 			const bpStream = createEventStream({
 				maxBufferSize: 100,
 				highWaterMark: 5,
 				enableBackpressure: true,
-				collectMetrics: false,
+				collectMetrics: false
 			})
 
 			bpStream.pause()
@@ -352,14 +351,14 @@ describe('BaileysEventStream', () => {
 			}
 		})
 
-		it('should emit drain event when below low water mark', (done) => {
+		it('should emit drain event when below low water mark', done => {
 			const bpStream = createEventStream({
 				maxBufferSize: 100,
 				highWaterMark: 5,
 				lowWaterMark: 2,
 				enableBackpressure: true,
 				batchSize: 10,
-				collectMetrics: false,
+				collectMetrics: false
 			})
 
 			bpStream.pause()
@@ -404,7 +403,7 @@ describe('eventFilters', () => {
 				data: {},
 				timestamp: Date.now(),
 				priority: 'normal',
-				category: 'message',
+				category: 'message'
 			}
 
 			const nonMatchingEvent: StreamEvent = {
@@ -413,7 +412,7 @@ describe('eventFilters', () => {
 				data: {},
 				timestamp: Date.now(),
 				priority: 'normal',
-				category: 'connection',
+				category: 'connection'
 			}
 
 			expect(filter(matchingEvent)).toBe(true)
@@ -431,7 +430,7 @@ describe('eventFilters', () => {
 				data: {},
 				timestamp: Date.now(),
 				priority: 'normal',
-				category: 'message',
+				category: 'message'
 			}
 
 			const nonMatchingEvent: StreamEvent = {
@@ -440,7 +439,7 @@ describe('eventFilters', () => {
 				data: {},
 				timestamp: Date.now(),
 				priority: 'normal',
-				category: 'presence',
+				category: 'presence'
 			}
 
 			expect(filter(matchingEvent)).toBe(true)
@@ -458,7 +457,7 @@ describe('eventFilters', () => {
 				data: {},
 				timestamp: Date.now(),
 				priority: 'critical',
-				category: 'connection',
+				category: 'connection'
 			}
 
 			const lowEvent: StreamEvent = {
@@ -467,7 +466,7 @@ describe('eventFilters', () => {
 				data: {},
 				timestamp: Date.now(),
 				priority: 'low',
-				category: 'presence',
+				category: 'presence'
 			}
 
 			expect(filter(criticalEvent)).toBe(true)
@@ -485,7 +484,7 @@ describe('eventFilters', () => {
 				data: {},
 				timestamp: Date.now(),
 				priority: 'normal',
-				category: 'message',
+				category: 'message'
 			}
 
 			const oldEvent: StreamEvent = {
@@ -494,7 +493,7 @@ describe('eventFilters', () => {
 				data: {},
 				timestamp: Date.now() - 5000,
 				priority: 'normal',
-				category: 'message',
+				category: 'message'
 			}
 
 			expect(filter(recentEvent)).toBe(true)
@@ -504,10 +503,7 @@ describe('eventFilters', () => {
 
 	describe('and', () => {
 		it('should combine filters with AND', () => {
-			const filter = eventFilters.and(
-				eventFilters.byType('messages.upsert'),
-				eventFilters.byMinPriority('high')
-			)
+			const filter = eventFilters.and(eventFilters.byType('messages.upsert'), eventFilters.byMinPriority('high'))
 
 			const matchingEvent: StreamEvent = {
 				id: '1',
@@ -515,7 +511,7 @@ describe('eventFilters', () => {
 				data: {},
 				timestamp: Date.now(),
 				priority: 'high',
-				category: 'message',
+				category: 'message'
 			}
 
 			const partialMatch: StreamEvent = {
@@ -524,7 +520,7 @@ describe('eventFilters', () => {
 				data: {},
 				timestamp: Date.now(),
 				priority: 'low',
-				category: 'message',
+				category: 'message'
 			}
 
 			expect(filter(matchingEvent)).toBe(true)
@@ -534,10 +530,7 @@ describe('eventFilters', () => {
 
 	describe('or', () => {
 		it('should combine filters with OR', () => {
-			const filter = eventFilters.or(
-				eventFilters.byType('messages.upsert'),
-				eventFilters.byCategory('connection')
-			)
+			const filter = eventFilters.or(eventFilters.byType('messages.upsert'), eventFilters.byCategory('connection'))
 
 			const typeMatch: StreamEvent = {
 				id: '1',
@@ -545,7 +538,7 @@ describe('eventFilters', () => {
 				data: {},
 				timestamp: Date.now(),
 				priority: 'normal',
-				category: 'message',
+				category: 'message'
 			}
 
 			const categoryMatch: StreamEvent = {
@@ -554,7 +547,7 @@ describe('eventFilters', () => {
 				data: {},
 				timestamp: Date.now(),
 				priority: 'normal',
-				category: 'connection',
+				category: 'connection'
 			}
 
 			const noMatch: StreamEvent = {
@@ -563,7 +556,7 @@ describe('eventFilters', () => {
 				data: {},
 				timestamp: Date.now(),
 				priority: 'normal',
-				category: 'presence',
+				category: 'presence'
 			}
 
 			expect(filter(typeMatch)).toBe(true)
@@ -584,7 +577,7 @@ describe('eventTransformers', () => {
 				data: {},
 				timestamp: Date.now() - 1000,
 				priority: 'normal',
-				category: 'message',
+				category: 'message'
 			}
 
 			const transformed = transformer(event)
@@ -604,7 +597,7 @@ describe('eventTransformers', () => {
 				data: {},
 				timestamp: Date.now(),
 				priority: 'normal',
-				category: 'message',
+				category: 'message'
 			}
 
 			const transformed = transformer(event)
@@ -616,7 +609,7 @@ describe('eventTransformers', () => {
 	describe('elevatepriorityIf', () => {
 		it('should elevate priority when condition is met', () => {
 			const transformer = eventTransformers.elevatepriorityIf(
-				(event) => (event.data as { urgent?: boolean }).urgent === true,
+				event => (event.data as { urgent?: boolean }).urgent === true,
 				'critical'
 			)
 
@@ -626,7 +619,7 @@ describe('eventTransformers', () => {
 				data: { urgent: true },
 				timestamp: Date.now(),
 				priority: 'normal',
-				category: 'message',
+				category: 'message'
 			}
 
 			const normalEvent: StreamEvent = {
@@ -635,7 +628,7 @@ describe('eventTransformers', () => {
 				data: { urgent: false },
 				timestamp: Date.now(),
 				priority: 'normal',
-				category: 'message',
+				category: 'message'
 			}
 
 			expect(transformer(urgentEvent).priority).toBe('critical')

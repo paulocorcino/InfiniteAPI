@@ -14,8 +14,8 @@
  */
 
 import { EventEmitter } from 'events'
-import { metrics } from './prometheus-metrics.js'
 import type { CircuitBreaker } from './circuit-breaker.js'
+import { metrics } from './prometheus-metrics.js'
 
 /**
  * Retry configuration with custom progressive backoff
@@ -190,6 +190,7 @@ function fibonacciNumber(n: number): number {
 		a = b
 		b = c
 	}
+
 	return b
 }
 
@@ -205,6 +206,7 @@ async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 			if (signal && abortHandler) {
 				signal.removeEventListener('abort', abortHandler)
 			}
+
 			resolve()
 		}, ms)
 
@@ -228,11 +230,7 @@ async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 /**
  * Execute operation with timeout
  */
-async function executeWithTimeout<T>(
-	operation: () => Promise<T>,
-	timeout: number,
-	signal?: AbortSignal
-): Promise<T> {
+async function executeWithTimeout<T>(operation: () => Promise<T>, timeout: number, signal?: AbortSignal): Promise<T> {
 	return new Promise<T>((resolve, reject) => {
 		let completed = false
 
@@ -250,14 +248,14 @@ async function executeWithTimeout<T>(
 		}
 
 		operation()
-			.then((result) => {
+			.then(result => {
 				if (!completed) {
 					completed = true
 					clearTimeout(timer)
 					resolve(result)
 				}
 			})
-			.catch((error) => {
+			.catch(error => {
 				if (!completed) {
 					completed = true
 					clearTimeout(timer)
@@ -289,14 +287,14 @@ export async function retry<T>(
 		onRetry: options.onRetry ?? (() => {}),
 		onSuccess: options.onSuccess ?? (() => {}),
 		onFailure: options.onFailure ?? (() => {}),
-		abortSignal: options.abortSignal,
+		abortSignal: options.abortSignal
 	}
 
 	const context: RetryContext = {
 		attempt: 0,
 		maxAttempts: config.maxAttempts,
 		startTime: Date.now(),
-		aborted: false,
+		aborted: false
 	}
 
 	let lastError: Error | undefined
@@ -325,11 +323,7 @@ export async function retry<T>(
 			let result: T
 
 			if (config.timeout) {
-				result = await executeWithTimeout(
-					() => Promise.resolve(operation(context)),
-					config.timeout,
-					config.abortSignal
-				)
+				result = await executeWithTimeout(() => Promise.resolve(operation(context)), config.timeout, config.abortSignal)
 			} else {
 				result = await operation(context)
 			}
@@ -398,21 +392,18 @@ export async function retryWithResult<T>(
 	let lastAttemptStart = startTime
 
 	try {
-		const result = await retry(
-			(context) => {
-				attempts = context.attempt
-				lastAttemptStart = Date.now()
-				return operation(context)
-			},
-			options
-		)
+		const result = await retry(context => {
+			attempts = context.attempt
+			lastAttemptStart = Date.now()
+			return operation(context)
+		}, options)
 
 		return {
 			success: true,
 			result,
 			attempts,
 			totalDuration: Date.now() - startTime,
-			lastAttemptDuration: Date.now() - lastAttemptStart,
+			lastAttemptDuration: Date.now() - lastAttemptStart
 		}
 	} catch (error) {
 		return {
@@ -420,7 +411,7 @@ export async function retryWithResult<T>(
 			error: error as Error,
 			attempts,
 			totalDuration: Date.now() - startTime,
-			lastAttemptDuration: Date.now() - lastAttemptStart,
+			lastAttemptDuration: Date.now() - lastAttemptStart
 		}
 	}
 }
@@ -429,10 +420,7 @@ export async function retryWithResult<T>(
  * Factory to create configured retry function
  */
 export function createRetrier(defaultOptions: RetryOptions = {}) {
-	return <T>(
-		operation: (context: RetryContext) => T | Promise<T>,
-		options?: RetryOptions
-	): Promise<T> => {
+	return <T>(operation: (context: RetryContext) => T | Promise<T>, options?: RetryOptions): Promise<T> => {
 		return retry(operation, { ...defaultOptions, ...options })
 	}
 }
@@ -450,10 +438,10 @@ export function withRetry(options: RetryOptions = {}) {
 		if (!originalMethod) return descriptor
 
 		descriptor.value = async function (...args: unknown[]): Promise<unknown> {
-			return retry(
-				() => originalMethod.apply(this, args),
-				{ ...options, operationName: options.operationName || propertyKey }
-			)
+			return retry(() => originalMethod.apply(this, args), {
+				...options,
+				operationName: options.operationName || propertyKey
+			})
 		}
 
 		return descriptor
@@ -463,7 +451,7 @@ export function withRetry(options: RetryOptions = {}) {
 /**
  * Wrapper for function with retry
  */
-export function retryable<T extends (...args: unknown[]) => unknown>(
+export function retryable<T extends(...args: unknown[]) => unknown>(
 	fn: T,
 	options: RetryOptions = {}
 ): (...args: Parameters<T>) => Promise<ReturnType<T>> {
@@ -498,10 +486,10 @@ export class RetryManager extends EventEmitter {
 		const abortController = new AbortController()
 		const mergedOptions = { ...this.defaultOptions, ...options, abortSignal: abortController.signal }
 
-		const retryPromise = retry((context) => {
+		const retryPromise = retry(context => {
 			this.activeRetries.set(id, {
 				cancel: () => abortController.abort(),
-				context,
+				context
 			})
 			this.emit('attempt', { id, attempt: context.attempt })
 			return operation(context)
@@ -530,6 +518,7 @@ export class RetryManager extends EventEmitter {
 			this.emit('cancelled', { id })
 			return true
 		}
+
 		return false
 	}
 
@@ -541,6 +530,7 @@ export class RetryManager extends EventEmitter {
 			active.cancel()
 			this.emit('cancelled', { id })
 		}
+
 		this.activeRetries.clear()
 	}
 
@@ -579,22 +569,22 @@ export const retryPredicates = {
 	/** Retry only on network errors */
 	onNetworkError: (error: Error) => {
 		const networkErrors = ['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN']
-		return networkErrors.some((code) => error.message.includes(code) || (error as NodeJS.ErrnoException).code === code)
+		return networkErrors.some(code => error.message.includes(code) || (error as NodeJS.ErrnoException).code === code)
 	},
 
 	/** Retry only on specific errors */
 	onErrorCodes:
 		(codes: string[]) =>
-			(error: Error): boolean => {
-				return codes.some((code) => error.message.includes(code) || (error as NodeJS.ErrnoException).code === code)
-			},
+		(error: Error): boolean => {
+			return codes.some(code => error.message.includes(code) || (error as NodeJS.ErrnoException).code === code)
+		},
 
 	/** Retry except on specific errors */
 	exceptErrorCodes:
 		(codes: string[]) =>
-			(error: Error): boolean => {
-				return !codes.some((code) => error.message.includes(code) || (error as NodeJS.ErrnoException).code === code)
-			},
+		(error: Error): boolean => {
+			return !codes.some(code => error.message.includes(code) || (error as NodeJS.ErrnoException).code === code)
+		},
 
 	/** Retry on HTTP 5xx errors or timeout */
 	onServerError: (error: Error) => {
@@ -611,16 +601,16 @@ export const retryPredicates = {
 	/** Combine multiple predicates with OR */
 	or:
 		(...predicates: Array<(error: Error, attempt: number) => boolean>) =>
-			(error: Error, attempt: number): boolean => {
-				return predicates.some((p) => p(error, attempt))
-			},
+		(error: Error, attempt: number): boolean => {
+			return predicates.some(p => p(error, attempt))
+		},
 
 	/** Combine multiple predicates with AND */
 	and:
 		(...predicates: Array<(error: Error, attempt: number) => boolean>) =>
-			(error: Error, attempt: number): boolean => {
-				return predicates.every((p) => p(error, attempt))
-			},
+		(error: Error, attempt: number): boolean => {
+			return predicates.every(p => p(error, attempt))
+		}
 }
 
 /**
@@ -633,7 +623,7 @@ export const retryConfigs = {
 		baseDelay: 100,
 		maxDelay: 5000,
 		backoffStrategy: 'exponential' as const,
-		jitter: 0.2,
+		jitter: 0.2
 	},
 
 	/** Conservative retry (few attempts, long delays) */
@@ -642,7 +632,7 @@ export const retryConfigs = {
 		baseDelay: 2000,
 		maxDelay: 60000,
 		backoffStrategy: 'exponential' as const,
-		jitter: 0.1,
+		jitter: 0.1
 	},
 
 	/** Fast retry (for short operations) */
@@ -651,7 +641,7 @@ export const retryConfigs = {
 		baseDelay: 50,
 		maxDelay: 1000,
 		backoffStrategy: 'linear' as const,
-		jitter: 0.05,
+		jitter: 0.05
 	},
 
 	/** Retry for network operations */
@@ -661,7 +651,7 @@ export const retryConfigs = {
 		maxDelay: 30000,
 		backoffStrategy: 'exponential' as const,
 		jitter: 0.1,
-		shouldRetry: retryPredicates.onNetworkError,
+		shouldRetry: retryPredicates.onNetworkError
 	},
 
 	/**
@@ -679,8 +669,8 @@ export const retryConfigs = {
 		baseDelay: 1000, // = RETRY_BACKOFF_DELAYS[0]
 		maxDelay: 20000, // = RETRY_BACKOFF_DELAYS[4]
 		backoffStrategy: 'stepped' as const,
-		jitter: 0.15, // = RETRY_JITTER_FACTOR
-	},
+		jitter: 0.15 // = RETRY_JITTER_FACTOR
+	}
 }
 
 /**

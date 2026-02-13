@@ -1,5 +1,5 @@
+import { existsSync, readFileSync } from 'fs'
 import { platform, release } from 'os'
-import { readFileSync, existsSync } from 'fs'
 import { proto } from '../../WAProto/index.js'
 import type { BrowsersMap } from '../Types'
 
@@ -32,7 +32,7 @@ const FALLBACK_VERSIONS = {
 	ubuntu: '24.04.1',
 	macOS: '15.2',
 	windows: '10.0.26100',
-	baileys: '6.5.0',
+	baileys: '6.5.0'
 } as const
 
 /**
@@ -49,7 +49,7 @@ const DARWIN_TO_MACOS: Readonly<Record<number, number>> = {
 	22: 13, // Ventura
 	21: 12, // Monterey
 	20: 11, // Big Sur
-	19: 10, // Catalina (10.15)
+	19: 10 // Catalina (10.15)
 } as const
 
 /**
@@ -67,7 +67,7 @@ const PLATFORM_MAP: Readonly<Record<NodeJS.Platform, string | undefined>> = {
 	netbsd: undefined,
 	openbsd: 'OpenBSD',
 	sunos: 'Solaris',
-	win32: 'Windows',
+	win32: 'Windows'
 } as const
 
 // ============================================================
@@ -93,6 +93,7 @@ const BROWSER_TO_PLATFORM_ID: ReadonlyMap<string, string> = (() => {
 			entries.push([key.toUpperCase(), value.toString()])
 		}
 	}
+
 	return new Map(entries)
 })()
 
@@ -231,7 +232,7 @@ const detectOSVersions = (): Readonly<{
 		ubuntu: currentPlatform === 'linux' ? getLinuxVersion() : FALLBACK_VERSIONS.ubuntu,
 		macOS: currentPlatform === 'darwin' ? getMacOSVersion() : FALLBACK_VERSIONS.macOS,
 		windows: currentPlatform === 'win32' ? getWindowsVersion() : FALLBACK_VERSIONS.windows,
-		baileys: FALLBACK_VERSIONS.baileys,
+		baileys: FALLBACK_VERSIONS.baileys
 	}
 }
 
@@ -270,6 +271,7 @@ const normalizeBrowserKey = (browser: unknown): string | null => {
 	if (typeof browser !== 'string') {
 		return null
 	}
+
 	const normalized = browser.trim()
 	return normalized.length > 0 ? normalized.toUpperCase() : null
 }
@@ -285,16 +287,16 @@ const getAppropriateVersion = (): string => {
 		const currentPlatform = platform()
 
 		switch (currentPlatform) {
-		case 'darwin':
-			return OS_VERSIONS.macOS
-		case 'win32':
-			return OS_VERSIONS.windows
-		case 'linux':
-			return OS_VERSIONS.ubuntu
-		default:
-			// For other platforms, try os.release() directly
-			const version = release()
-			return version || DEFAULT_OS_VERSION
+			case 'darwin':
+				return OS_VERSIONS.macOS
+			case 'win32':
+				return OS_VERSIONS.windows
+			case 'linux':
+				return OS_VERSIONS.ubuntu
+			default:
+				// For other platforms, try os.release() directly
+				const version = release()
+				return version || DEFAULT_OS_VERSION
 		}
 	} catch {
 		return DEFAULT_OS_VERSION
@@ -329,7 +331,7 @@ export const Browsers: BrowsersMap = {
 	macOS: (browser: string): [string, string, string] => ['Mac OS', browser, OS_VERSIONS.macOS],
 	windows: (browser: string): [string, string, string] => ['Windows', browser, OS_VERSIONS.windows],
 	baileys: (browser: string): [string, string, string] => ['Baileys', browser, OS_VERSIONS.baileys],
-	appropriate: (browser: string): [string, string, string] => [getPlatformName(), browser, getAppropriateVersion()],
+	appropriate: (browser: string): [string, string, string] => [getPlatformName(), browser, getAppropriateVersion()]
 } as const
 
 /**
