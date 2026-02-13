@@ -29,7 +29,6 @@ describe('SessionActivityTracker', () => {
 			const tracker = makeSessionActivityTracker(mockKeys, logger, config)
 
 			const jid = '5511999999999@s.whatsapp.net'
-			const _beforeTime = Date.now()
 
 			tracker.recordActivity(jid)
 

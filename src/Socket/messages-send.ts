@@ -721,6 +721,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 	 * Returns the attributes for the interactive binary node based on message type
 	 * For native_flow: returns { v: '4', name: '' } or special attributes for payment flows
 	 */
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	const _getButtonArgs = (message: proto.IMessage): BinaryNodeAttributes => {
 		const buttonType = getButtonType(message)
 
@@ -879,6 +880,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						delete message.viewOnceMessage
 						message.listMessage = listMessage
 						// Keep messageContextInfo if it was nested
+						// eslint-disable-next-line max-depth
 						if (!message.messageContextInfo && innerMsg?.messageContextInfo) {
 							message.messageContextInfo = innerMsg.messageContextInfo
 						}

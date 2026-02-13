@@ -154,11 +154,13 @@ function extractIdentityFromPkmsg(ciphertext: Uint8Array, logger?: ILogger): Uin
 				// Field 5 is identityKey
 				if (fieldNumber === 5) {
 					// Validate key length
+					// eslint-disable-next-line max-depth
 					if (length !== IDENTITY_KEY_LENGTH) {
 						logger?.debug({ length, expected: IDENTITY_KEY_LENGTH }, 'Invalid identity key length')
 						return undefined
 					}
 
+					// eslint-disable-next-line max-depth
 					if (offset + length > ciphertext.length) {
 						logger?.debug('Identity key extends beyond ciphertext bounds')
 						return undefined
@@ -167,6 +169,7 @@ function extractIdentityFromPkmsg(ciphertext: Uint8Array, logger?: ILogger): Uin
 					const identityKey = ciphertext.slice(offset, offset + length)
 
 					// Validate key type byte (must be 0x05 for Curve25519)
+					// eslint-disable-next-line max-depth
 					if (identityKey[0] !== CURVE25519_KEY_TYPE) {
 						logger?.debug({ type: identityKey[0], expected: CURVE25519_KEY_TYPE }, 'Invalid identity key type')
 						return undefined
@@ -349,6 +352,7 @@ export function makeLibSignalRepository(
 
 								// Reset prekey circuit breaker since we identified the cause
 								// Reset regardless of state (could be open, half-open, or closed with accumulated failures)
+								// eslint-disable-next-line max-depth
 								if (preKeyCircuitBreaker) {
 									preKeyCircuitBreaker.reset()
 									logger.debug({ jid }, 'Reset prekey circuit breaker after identity key change detection')

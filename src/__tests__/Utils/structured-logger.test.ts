@@ -8,7 +8,6 @@ import {
 	createTimer,
 	getDefaultLogger,
 	LOG_LEVEL_VALUES,
-	type LogLevel,
 	setDefaultLogger,
 	StructuredLogger
 } from '../../Utils/structured-logger.js'

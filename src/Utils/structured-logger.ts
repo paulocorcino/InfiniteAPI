@@ -320,7 +320,7 @@ class AsyncLogQueue {
 	enqueue(task: () => void): void {
 		if (this.destroyed) return
 		this.queue.push(task)
-		this.processNext()
+		void this.processNext()
 	}
 
 	private async processNext(): Promise<void> {

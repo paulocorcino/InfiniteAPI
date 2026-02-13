@@ -304,7 +304,8 @@ describe('SessionCleanup', () => {
 		})
 
 		it('should handle null sessionActivityTracker gracefully', async () => {
-			const now = Date.now()
+			// eslint-disable-next-line @typescript-eslint/no-unused-vars
+			const _ = Date.now()
 
 			// @ts-ignore
 			mockKeys.get.mockResolvedValue({

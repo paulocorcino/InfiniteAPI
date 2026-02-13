@@ -468,7 +468,8 @@ export function cached<V>(options: CacheOptions<V> & { keyGenerator?: (...args: 
 /**
  * Wrapper for function with cache
  */
-export function withCache<T extends (...args: unknown[]) => unknown>(
+
+export function withCache<T extends(...args: unknown[]) => unknown>(
 	fn: T,
 	options: CacheOptions<ReturnType<T>> & { keyGenerator?: (...args: Parameters<T>) => string } = {}
 ): T {

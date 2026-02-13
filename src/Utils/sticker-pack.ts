@@ -4,7 +4,7 @@ import { zipSync } from 'fflate'
 import { promises as fs } from 'fs'
 import { proto } from '../../WAProto/index.js'
 import type { MediaType } from '../Defaults/index.js'
-import type { Sticker, StickerPack, WAMediaUpload, WAMediaUploadFunction } from '../Types/Message.js'
+import type { StickerPack, WAMediaUpload, WAMediaUploadFunction } from '../Types/Message.js'
 import { generateMessageIDV2 } from './generics.js'
 import type { ILogger } from './logger.js'
 import { encryptedStream, getImageProcessingLibrary } from './messages-media.js'
@@ -465,6 +465,7 @@ export const prepareStickerPackMessage = async (
 				const buffer = await mediaToBuffer(sticker.data, `sticker ${i + 1}`)
 
 				// Converte para WebP
+				// eslint-disable-next-line prefer-const
 				let { webpBuffer, isAnimated } = await convertToWebP(buffer, logger)
 
 				// ENHANCEMENT: Auto-compression if exceeds 1MB (try quality 70, then 50)
@@ -484,6 +485,7 @@ export const prepareStickerPackMessage = async (
 						try {
 							const compressed70 = await lib.sharp.default(buffer).webp({ quality: 70 }).toBuffer()
 
+							// eslint-disable-next-line max-depth
 							if (compressed70.length <= MAX_STICKER_SIZE) {
 								webpBuffer = compressed70
 								logger?.info(
@@ -498,6 +500,7 @@ export const prepareStickerPackMessage = async (
 								// Try quality 50
 								const compressed50 = await lib.sharp.default(buffer).webp({ quality: 50 }).toBuffer()
 
+								// eslint-disable-next-line max-depth
 								if (compressed50.length <= MAX_STICKER_SIZE) {
 									webpBuffer = compressed50
 									logger?.info(
