@@ -1,4 +1,3 @@
-/* eslint-disable max-depth, @typescript-eslint/no-unused-vars */
 /**
  * Smart Cache System
  *

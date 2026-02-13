@@ -1,4 +1,3 @@
-/* eslint-disable max-depth */
 /**
  * Circuit Breaker Pattern Implementation
  *

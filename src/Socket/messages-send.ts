@@ -1,4 +1,3 @@
-/* eslint-disable max-depth, @typescript-eslint/no-unused-vars, @typescript-eslint/no-floating-promises */
 import NodeCache from '@cacheable/node-cache'
 import { Boom } from '@hapi/boom'
 import { proto } from '../../WAProto/index.js'
@@ -43,7 +42,7 @@ import {
 import { logMessageSent } from '../Utils/baileys-logger'
 import { getUrlInfo } from '../Utils/link-preview'
 import { makeKeyedMutex } from '../Utils/make-mutex'
-import { metrics, recordMessageFailure, recordMessageRetry, recordMessageSent } from '../Utils/prometheus-metrics'
+import { metrics, recordMessageFailure, recordMessageSent } from '../Utils/prometheus-metrics'
 import { getMessageReportingToken, shouldIncludeReportingToken } from '../Utils/reporting-utils'
 import {
 	areJidsSameUser,
@@ -722,7 +721,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 	 * Returns the attributes for the interactive binary node based on message type
 	 * For native_flow: returns { v: '4', name: '' } or special attributes for payment flows
 	 */
-	const getButtonArgs = (message: proto.IMessage): BinaryNodeAttributes => {
+	const _getButtonArgs = (message: proto.IMessage): BinaryNodeAttributes => {
 		const buttonType = getButtonType(message)
 
 		// For native_flow messages, check for special button types that need specific attributes
@@ -940,7 +939,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				const bytes = encodeNewsletterMessage(patched as proto.IMessage)
 				binaryNodeContent.push({
 					tag: 'plaintext',
-				// eslint-disable-next-line @typescript-eslint/no-floating-promises
 					attrs: {},
 					content: bytes
 				})

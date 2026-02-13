@@ -1,4 +1,3 @@
-/* eslint-disable max-depth, @typescript-eslint/no-unused-vars */
 /* @ts-ignore */
 import { createHash } from 'crypto'
 import * as libsignal from 'libsignal'
