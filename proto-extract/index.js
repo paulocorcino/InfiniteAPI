@@ -499,7 +499,12 @@ async function findAppModules() {
   const decodedProto = Object.keys(decodedProtoMap).sort();
   const sortedStr = decodedProto.map((d) => decodedProtoMap[d]).join('\n');
 
-  const decodedProtoStr = `syntax = "proto3";\npackage proto;\n\n/// WhatsApp Version: ${whatsAppVersion}\n\n${sortedStr}`;
+  let decodedProtoStr = `syntax = "proto3";\npackage proto;\n\n/// WhatsApp Version: ${whatsAppVersion}\n\n${sortedStr}`;
+
+  // Fix: proto3 doesn't support 'required' keyword (only proto2 does)
+  // Convert all 'required' fields to 'optional' for proto3 compatibility
+  decodedProtoStr = decodedProtoStr.replace(/(\n\s+)required /g, '$1optional ');
+
   const destinationPath = '../WAProto/WAProto.proto';
   await fs.writeFile(destinationPath, decodedProtoStr);
 
