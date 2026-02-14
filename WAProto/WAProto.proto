@@ -1,7 +1,7 @@
 syntax = "proto3";
 package proto;
 
-/// WhatsApp Version: 2.3000.1033381705
+/// WhatsApp Version: 2.3000.1033468106
 
 message ADVDeviceIdentity {
     optional uint32 rawId = 1;
@@ -342,14 +342,6 @@ message BotAgeCollectionMetadata {
     }
 }
 
-message BotAvatarMetadata {
-    optional uint32 sentiment = 1;
-    optional string behaviorGraph = 2;
-    optional uint32 action = 3;
-    optional uint32 intensity = 4;
-    optional uint32 wordCount = 5;
-}
-
 message BotCapabilityMetadata {
     repeated BotCapabilityType capabilities = 1;
     enum BotCapabilityType {
@@ -608,7 +600,6 @@ message BotMessageSharingInfo {
 }
 
 message BotMetadata {
-    optional BotAvatarMetadata avatarMetadata = 1;
     optional string personaId = 2;
     optional BotPluginMetadata pluginMetadata = 3;
     optional BotSuggestedPromptMetadata suggestedPromptMetadata = 4;
@@ -1065,10 +1056,10 @@ message ChatRowOpaqueData {
 }
 
 message Citation {
-    optional string title = 1;
-    optional string subtitle = 2;
-    optional string cmsId = 3;
-    optional string imageUrl = 4;
+    required string title = 1;
+    required string subtitle = 2;
+    required string cmsId = 3;
+    required string imageUrl = 4;
 }
 
 message ClientPairingProps {
@@ -1553,7 +1544,7 @@ message ContextInfo {
 }
 
 message Conversation {
-    optional string id = 1;
+    required string id = 1;
     repeated HistorySyncMsg messages = 2;
     optional string newJid = 3;
     optional string oldJid = 4;
@@ -1882,7 +1873,7 @@ message GroupMention {
 }
 
 message GroupParticipant {
-    optional string userJid = 1;
+    required string userJid = 1;
     optional Rank rank = 2;
     optional MemberLabel memberLabel = 3;
     enum Rank {
@@ -1920,7 +1911,7 @@ message HandshakeMessage {
 }
 
 message HistorySync {
-    optional HistorySyncType syncType = 1;
+    required HistorySyncType syncType = 1;
     repeated Conversation conversations = 2;
     repeated WebMessageInfo statusV3Messages = 3;
     optional uint32 chunkOrder = 5;
@@ -2080,8 +2071,8 @@ message KeyId {
 }
 
 message LIDMigrationMapping {
-    optional uint64 pn = 1;
-    optional uint64 assignedLid = 2;
+    required uint64 pn = 1;
+    required uint64 assignedLid = 2;
     optional uint64 latestLid = 3;
 }
 
@@ -2621,8 +2612,15 @@ message Message {
         }
     }
     
+    message FullHistorySyncOnDemandConfig {
+        optional uint64 historyFromTimestamp = 1;
+        optional uint32 historyDurationDays = 2;
+    }
+    
     message FullHistorySyncOnDemandRequestMetadata {
         optional string requestId = 1;
+        optional string businessProduct = 2;
+        optional bytes opaqueClientData = 3;
     }
     
     message FutureProofMessage {
@@ -3158,6 +3156,7 @@ message Message {
         message FullHistorySyncOnDemandRequest {
             optional Message.FullHistorySyncOnDemandRequestMetadata requestMetadata = 1;
             optional DeviceProps.HistorySyncConfig historySyncConfig = 2;
+            optional Message.FullHistorySyncOnDemandConfig fullHistorySyncOnDemandConfig = 3;
         }
         
         message GalaxyFlowAction {
@@ -3453,6 +3452,7 @@ message Message {
         optional AIQueryFanout aiQueryFanout = 26;
         optional MemberLabel memberLabel = 27;
         optional AIMediaCollectionMessage aiMediaCollectionMessage = 28;
+        optional uint32 afterReadDurationMs = 29;
         enum Type {
             REVOKE = 0;
             EPHEMERAL_SETTING = 3;
@@ -3724,10 +3724,10 @@ message Message {
     }
     
     message VideoEndCard {
-        optional string username = 1;
-        optional string caption = 2;
-        optional string thumbnailImageUrl = 3;
-        optional string profilePictureUrl = 4;
+        required string username = 1;
+        required string caption = 2;
+        required string thumbnailImageUrl = 3;
+        required string profilePictureUrl = 4;
     }
     
     message VideoMessage {
@@ -4025,6 +4025,7 @@ enum MutationProps {
     AI_THREAD_RENAME_ACTION = 76;
     INTERACTIVE_MESSAGE_ACTION = 77;
     SETTINGS_SYNC_ACTION = 78;
+    OUT_CONTACT_ACTION = 79;
     SHARE_OWN_PN = 10001;
     BUSINESS_BROADCAST_ACTION = 10002;
     AI_THREAD_DELETE_ACTION = 10003;
@@ -4557,7 +4558,7 @@ message StatusMentionMessage {
 }
 
 message StatusPSA {
-    optional uint64 campaignId = 44;
+    required uint64 campaignId = 44;
     optional uint64 campaignExpirationTimestamp = 45;
 }
 
@@ -4655,6 +4656,7 @@ message SyncActionValue {
     optional AiThreadRenameAction aiThreadRenameAction = 76;
     optional InteractiveMessageAction interactiveMessageAction = 77;
     optional SettingsSyncAction settingsSyncAction = 78;
+    optional OutContactAction outContactAction = 79;
     message AgentAction {
         optional string name = 1;
         optional int32 deviceID = 2;
@@ -4689,7 +4691,7 @@ message SyncActionValue {
     }
     
     message BroadcastListParticipant {
-        optional string lidJid = 1;
+        required string lidJid = 1;
         optional string pnJid = 2;
     }
     
@@ -4734,15 +4736,15 @@ message SyncActionValue {
     }
     
     message CustomPaymentMethod {
-        optional string credentialId = 1;
-        optional string country = 2;
-        optional string type = 3;
+        required string credentialId = 1;
+        required string country = 2;
+        required string type = 3;
         repeated SyncActionValue.CustomPaymentMethodMetadata metadata = 4;
     }
     
     message CustomPaymentMethodMetadata {
-        optional string key = 1;
-        optional string value = 2;
+        required string key = 1;
+        required string value = 2;
     }
     
     message CustomPaymentMethodsAction {
@@ -4780,7 +4782,7 @@ message SyncActionValue {
     }
     
     message InteractiveMessageAction {
-        optional InteractiveMessageActionMode type = 1;
+        required InteractiveMessageActionMode type = 1;
         enum InteractiveMessageActionMode {
             DISABLE_CTA = 1;
         }
@@ -4868,8 +4870,8 @@ message SyncActionValue {
     }
     
     message MerchantPaymentPartnerAction {
-        optional Status status = 1;
-        optional string country = 2;
+        required Status status = 1;
+        required string country = 2;
         optional string gatewayName = 3;
         optional string credentialId = 4;
         enum Status {
@@ -4920,13 +4922,18 @@ message SyncActionValue {
         optional bool acknowledged = 1;
     }
     
+    message OutContactAction {
+        optional string fullName = 1;
+        optional string firstName = 2;
+    }
+    
     message PaymentInfoAction {
         optional string cpi = 1;
     }
     
     message PaymentTosAction {
-        optional PaymentNotice paymentNotice = 1;
-        optional bool accepted = 2;
+        required PaymentNotice paymentNotice = 1;
+        required bool accepted = 2;
         enum PaymentNotice {
             BR_PAY_PRIVACY_POLICY = 0;
         }
@@ -5295,7 +5302,7 @@ message UserPassword {
 }
 
 message UserReceipt {
-    optional string userJid = 1;
+    required string userJid = 1;
     optional int64 receiptTimestamp = 2;
     optional int64 readTimestamp = 3;
     optional int64 playedTimestamp = 4;
@@ -5381,7 +5388,7 @@ enum WebLinkRenderConfig {
     SYSTEM = 1;
 }
 message WebMessageInfo {
-    optional MessageKey key = 1;
+    required MessageKey key = 1;
     optional Message message = 2;
     optional uint64 messageTimestamp = 3;
     optional Status status = 4;
