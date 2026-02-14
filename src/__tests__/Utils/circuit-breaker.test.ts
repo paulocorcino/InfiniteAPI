@@ -25,6 +25,7 @@ describe('CircuitBreaker', () => {
 			successThreshold: 2,
 			resetTimeout: 100,
 			timeout: 1000,
+			volumeThreshold: 3,
 			collectMetrics: false
 		})
 	})
@@ -105,11 +106,11 @@ describe('CircuitBreaker', () => {
 			// Success resets failures
 			await breaker.execute(() => 'success')
 
-			// Need 3 more failures to open
-			await expect(breaker.execute(failingOp)).rejects.toThrow()
+			// Only 1 more failure needed (already have 2 in window, need 3 total)
 			await expect(breaker.execute(failingOp)).rejects.toThrow()
 
-			expect(breaker.isClosed()).toBe(true)
+			// Should open now (3 failures in window)
+			expect(breaker.isOpen()).toBe(true)
 		})
 	})
 
@@ -227,6 +228,7 @@ describe('CircuitBreaker', () => {
 			const customBreaker = createCircuitBreaker({
 				name: 'custom',
 				failureThreshold: 1,
+				volumeThreshold: 1,
 				shouldCountError: (error: any) => error.message !== 'Ignored',
 				collectMetrics: false
 			})

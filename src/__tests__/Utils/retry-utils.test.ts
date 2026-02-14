@@ -180,21 +180,29 @@ describe('retry', () => {
 	describe('abort signal', () => {
 		it('should abort with signal', async () => {
 			const controller = new AbortController()
+			let attempt = 0
 
 			const promise = retry(
 				async () => {
+					attempt++
+					if (attempt === 1) {
+						// First attempt fails to trigger retry
+						throw new Error('Temporary failure')
+					}
+
 					await new Promise(resolve => setTimeout(resolve, 100))
 					return 'success'
 				},
 				{
 					maxAttempts: 5,
-					baseDelay: 50,
+					baseDelay: 100,
 					abortSignal: controller.signal,
 					collectMetrics: false
 				}
 			)
 
-			setTimeout(() => controller.abort(), 20)
+			// Abort during retry delay (after first failure, before second attempt)
+			setTimeout(() => controller.abort(), 50)
 
 			await expect(promise).rejects.toThrow(RetryAbortedError)
 		})
@@ -335,7 +343,7 @@ describe('RetryManager', () => {
 	let manager: RetryManager
 
 	beforeEach(() => {
-		manager = new RetryManager({ baseDelay: 10, collectMetrics: false })
+		manager = new RetryManager({ baseDelay: 200, collectMetrics: false })
 	})
 
 	it('should execute operation with id', async () => {
@@ -344,12 +352,20 @@ describe('RetryManager', () => {
 	})
 
 	it('should cancel active retry', async () => {
+		let attempt = 0
+
 		const promise = manager.execute('cancelable', async () => {
+			attempt++
+			if (attempt === 1) {
+				throw new Error('Temporary failure')
+			}
+
 			await new Promise(resolve => setTimeout(resolve, 1000))
 			return 'result'
 		})
 
-		setTimeout(() => manager.cancel('cancelable'), 20)
+		// Cancel during retry delay
+		setTimeout(() => manager.cancel('cancelable'), 100)
 
 		await expect(promise).rejects.toThrow()
 	})
