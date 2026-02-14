@@ -1,0 +1,18 @@
+--- src/__tests__/Utils/baileys-event-stream.test.ts
++++ src/__tests__/Utils/baileys-event-stream.test.ts
+@@ -180,6 +180,7 @@
+ 		}
+ 
+ 		stream.resume()
++		await new Promise(resolve => setTimeout(resolve, 100))
+ 		const result = await stream.flush()
+ 
+ 		expect(result.processed).toBe(5)
+@@ -323,6 +324,7 @@
+ 		stream.push('call', {}, { priority: 'high' })
+ 
+ 		stream.resume()
++		await new Promise(resolve => setTimeout(resolve, 100))
+ 		await stream.flush()
+ 
+ 		expect(processedOrder[0]).toBe('critical')

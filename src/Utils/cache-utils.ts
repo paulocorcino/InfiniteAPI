@@ -95,7 +95,7 @@ export class Cache<V = unknown> {
 		this.stats = { hits: 0, misses: 0 }
 
 		this.cache = new LRUCache<string, CacheItem<V>>({
-			max: this.options.maxSize,
+			maxSize: this.options.maxSize,
 			ttl: this.options.ttl,
 			updateAgeOnGet: this.options.updateAgeOnGet,
 			sizeCalculation: item => this.options.sizeCalculation(item.value),

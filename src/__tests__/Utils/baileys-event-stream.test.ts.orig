@@ -180,7 +180,6 @@ describe('BaileysEventStream', () => {
 			}
 
 			stream.resume()
-		await new Promise(resolve => setTimeout(resolve, 50))
 			const result = await stream.flush()
 
 			expect(result.processed).toBe(5)
@@ -324,7 +323,6 @@ describe('BaileysEventStream', () => {
 			stream.push('call', {}, { priority: 'high' })
 
 			stream.resume()
-		await new Promise(resolve => setTimeout(resolve, 50))
 			await stream.flush()
 
 			expect(processedOrder[0]).toBe('critical')
