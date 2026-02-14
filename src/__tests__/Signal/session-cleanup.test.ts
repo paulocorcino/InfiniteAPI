@@ -271,24 +271,33 @@ describe('SessionCleanup', () => {
 		}
 
 		it('should handle exactly 24h for LID orphan (boundary)', async () => {
-			const now = Date.now()
-			const lastActivity = now - 24 * HOUR_MS // Exactly 24h
+			const fixedNow = 1700000000000 // Fixed timestamp to avoid race conditions
+			const lastActivity = fixedNow - 24 * HOUR_MS // Exactly 24h
 
-			// @ts-ignore
-			mockKeys.get.mockResolvedValue({
-				'123456789_2.0': Buffer.from('session-data')
-			})
+			// Mock Date.now() to return consistent value
+			const originalDateNow = Date.now
+			Date.now = jest.fn(() => fixedNow)
 
-			mockLidMapping.getPNForLID.mockResolvedValue(null)
+			try {
+				// @ts-ignore
+				mockKeys.get.mockResolvedValue({
+					'123456789_2.0': Buffer.from('session-data')
+				})
 
-			mockActivityTracker.getAllActivities.mockResolvedValue(new Map([['123456789@lid', lastActivity]]))
+				mockLidMapping.getPNForLID.mockResolvedValue(null)
 
-			const cleanup = makeSessionCleanup(mockKeys, mockLidMapping as any, mockActivityTracker as any, logger, config)
+				mockActivityTracker.getAllActivities.mockResolvedValue(new Map([['123456789@lid', lastActivity]]))
 
-			const stats = await cleanup.runCleanup()
+				const cleanup = makeSessionCleanup(mockKeys, mockLidMapping as any, mockActivityTracker as any, logger, config)
 
-			// Exactly 24h should NOT delete (> threshold, not >=)
-			expect(stats.lidOrphansDeleted).toBe(0)
+				const stats = await cleanup.runCleanup()
+
+				// Exactly 24h should NOT delete (> threshold, not >=)
+				expect(stats.lidOrphansDeleted).toBe(0)
+			} finally {
+				// Restore original Date.now
+				Date.now = originalDateNow
+			}
 		})
 
 		it('should handle empty session list', async () => {
