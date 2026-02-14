@@ -110,9 +110,10 @@ jobs:
           fi
 
       - name: Create Pull Request
+        id: create_pr
         if: steps.check_changes.outputs.has_changes == 'true' || steps.check_changes.outputs.force_mode == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
         run: |
           BRANCH_NAME="update-version/stable"
           FORCE="${{ inputs.force }}"
@@ -168,19 +169,12 @@ jobs:
           if [ $PR_CREATE_EXIT -eq 0 ]; then
             echo "✅ PR created successfully: $PR_URL"
 
-            # Auto-merge the PR (squash merge)
-            # Note: This requires branch protection rules to be satisfied
-            # If checks haven't completed yet, auto-merge will queue the merge
-            echo "Attempting to enable auto-merge..."
-            if gh pr merge "$BRANCH_NAME" --squash --auto --delete-branch 2>/dev/null; then
-              echo "✅ Auto-merge enabled - PR will merge automatically when checks pass"
-            else
-              echo "⚠️ Auto-merge not available - PR created for manual review"
-              echo "This may happen if:"
-              echo "  - Required status checks haven't completed yet"
-              echo "  - Branch protection rules require manual approval"
-              echo "  - Insufficient permissions (see workflow permissions comment)"
-            fi
+            # Extract PR number from URL
+            PR_NUMBER=$(echo "$PR_URL" | grep -oP '\d+$')
+            echo "📋 PR Number: #$PR_NUMBER"
+
+            # Save PR number for next step
+            echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
           else
             # PR creation failed - could be duplicate or other error
             echo "⚠️ Could not create PR. Checking if PR already exists..."
@@ -191,11 +185,28 @@ jobs:
             if [ -n "$EXISTING_PR" ]; then
               echo "ℹ️ PR already exists for branch $BRANCH_NAME"
               echo "$EXISTING_PR"
+
+              # Extract PR number from existing PR
+              PR_NUMBER=$(echo "$EXISTING_PR" | grep -oP '^\d+')
+              if [ -n "$PR_NUMBER" ]; then
+                echo "📋 Existing PR Number: #$PR_NUMBER"
+                # Save PR number for auto-merge step
+                echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+              fi
             else
               echo "❌ PR creation failed with error:"
               echo "$PR_URL"
             fi
           fi
+
+      - name: Enable Auto-merge
+        id: enable_automerge
+        if: steps.create_pr.outputs.pr_number != ''
+        uses: peter-evans/enable-pull-request-automerge@v3
+        with:
+          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+          pull-request-number: ${{ steps.create_pr.outputs.pr_number }}
+          merge-method: squash
 
       - name: Summary
         run: |
