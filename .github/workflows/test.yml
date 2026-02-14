@@ -45,11 +45,18 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-yarn-
 
+      - name: Debug Git Config
+        run: |
+          echo "=== Git URL Rewrites ==="
+          git config --global --get-regexp url
+          echo "=== Environment ==="
+          env | grep -i git || true
+
       - name: Install dependencies
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GIT_TERMINAL_PROMPT: 0
-        run: yarn install --immutable
+        run: yarn install --immutable --verbose
 
       - name: Run tests
         run: yarn test
