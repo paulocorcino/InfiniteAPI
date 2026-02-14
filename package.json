@@ -59,7 +59,7 @@
     "@eslint/eslintrc": "^3.3.1",
     "@eslint/js": "^9.31.0",
     "@types/jest": "^30.0.0",
-    "@types/node": "^20.19.33",
+    "@types/node": "^22.12.5",
     "@types/ws": "^8.0.0",
     "@typescript-eslint/eslint-plugin": "^8.55.0",
     "@typescript-eslint/parser": "^8.55.0",
@@ -86,7 +86,7 @@
     "tsx": "^4.20.3",
     "typedoc": "^0.28.17",
     "typedoc-plugin-markdown": "^4.10.0",
-    "typescript": "^5.8.2"
+    "typescript": "^5.9.3"
   },
   "peerDependencies": {
     "audio-decode": "^2.2.3",
