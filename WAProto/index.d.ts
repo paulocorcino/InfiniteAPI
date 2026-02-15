@@ -10036,6 +10036,8 @@ export namespace proto {
         eventExtraGuestsAllowed?: (boolean|null);
         plainProtobufBytes?: (Uint8Array|null);
         quarantineExtractedText?: (string|null);
+        pollEndTime?: (number|Long|null);
+        pollHideVoterNames?: (boolean|null);
     }
 
     class MsgOpaqueData implements IMsgOpaqueData {
@@ -10084,6 +10086,8 @@ export namespace proto {
         public eventExtraGuestsAllowed?: (boolean|null);
         public plainProtobufBytes?: (Uint8Array|null);
         public quarantineExtractedText?: (string|null);
+        public pollEndTime?: (number|Long|null);
+        public pollHideVoterNames?: (boolean|null);
         public static create(properties?: proto.IMsgOpaqueData): proto.MsgOpaqueData;
         public static encode(m: proto.IMsgOpaqueData, w?: $protobuf.Writer): $protobuf.Writer;
         public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): proto.MsgOpaqueData;
