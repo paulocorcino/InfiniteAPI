@@ -1251,6 +1251,11 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			const isCatalog = isCatalogMessage(message)
 			const isCarousel = isCarouselMessage(message)
 
+			// Collect biz/bot nodes to append AFTER device-identity and tctoken
+			// Pastorini order: participants → device-identity → tctoken → biz
+			// The biz node MUST be last for WhatsApp Web carousel rendering
+			const deferredNodes: BinaryNode[] = []
+
 			// EXPERIMENTAL: Try biz node injection for ALL interactive messages including catalog
 			// Previously we skipped catalog messages but they weren't rendering properly
 			if (buttonType && enableInteractiveMessages) {
@@ -1265,7 +1270,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					message.listMessage ||
 					message.viewOnceMessage?.message?.listMessage ||
 					message.viewOnceMessageV2?.message?.listMessage
-				const nativeFlowButtons = interactiveMsg?.nativeFlowMessage?.buttons || []
+				// For carousel messages, buttons are inside each card's nativeFlowMessage
+				let nativeFlowButtons = interactiveMsg?.nativeFlowMessage?.buttons || []
+				if (nativeFlowButtons.length === 0 && interactiveMsg?.carouselMessage?.cards?.length) {
+					nativeFlowButtons = interactiveMsg.carouselMessage.cards.flatMap(
+						(card: any) => card?.nativeFlowMessage?.buttons || []
+					)
+				}
 				const isListDetected = isListNativeFlow(message)
 
 				// Log full button details including buttonParamsJson for debugging
@@ -1307,7 +1318,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					// For listMessage (legacy format), use direct <list> tag
 					// This matches pastorini's working implementation
 					if (buttonType === 'list') {
-						;(stanza.content as BinaryNode[]).push({
+						deferredNodes.push({
 							tag: 'biz',
 							attrs: {},
 							content: [
@@ -1325,9 +1336,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							'[EXPERIMENTAL] Injected biz node for listMessage (legacy format)'
 						)
 					} else {
-						// Use 'mixed' as the native_flow name - this is required for message delivery
-						// Note: '' (empty) causes error 405 rejection from WhatsApp server
-						// Special flows (payment, mpm, order) use specific names
 						const SPECIAL_FLOW_NAMES: Record<string, string> = {
 							review_and_pay: 'payment_info',
 							payment_info: 'payment_info',
@@ -1342,10 +1350,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							'[EXPERIMENTAL] Determined native_flow name based on button types'
 						)
 
-						// Use nested structure: biz > interactive > native_flow
-						// For buttons, carousels, and other interactive messages
 						const interactiveType = 'native_flow'
-						;(stanza.content as BinaryNode[]).push({
+						deferredNodes.push({
 							tag: 'biz',
 							attrs: {},
 							content: [
@@ -1369,11 +1375,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						})
 					}
 
-					// Bot node (<bot biz_bot="1"/>) MUST NOT be injected for native_flow buttons
-					// It prevents WhatsApp Web/Desktop from rendering ALL button types
-					// (both quick_reply and CTA buttons). Confirmed by testing:
-					// - CTA buttons without bot node: works on Web ✅
-					// - quick_reply buttons with bot node: only smartphone, not Web ❌
+					// Bot node — skip for native_flow buttons (breaks Web rendering)
 					const isNativeFlowButtons = buttonType === 'native_flow'
 
 					const isPrivateUserChat =
@@ -1381,7 +1383,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						!isJidBot(destinationJid)
 
 					if (isPrivateUserChat && !isCarousel && !isCatalog && buttonType !== 'list' && !isNativeFlowButtons) {
-						;(stanza.content as BinaryNode[]).push({
+						deferredNodes.push({
 							tag: 'bot',
 							attrs: { biz_bot: '1' }
 						})
@@ -1490,7 +1492,119 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				;(stanza.content as BinaryNode[]).push(...additionalNodes)
 			}
 
+			// Append deferred biz/bot nodes LAST (after device-identity, tctoken)
+			// Pastorini order: participants → device-identity → tctoken → biz
+			if (deferredNodes.length > 0) {
+				;(stanza.content as BinaryNode[]).push(...deferredNodes)
+			}
+
 			logger.debug({ msgId }, `sending message to ${participants.length} devices`)
+
+			// ======= PROTOBUF ROUNDTRIP TEST: Verify encoding preserves carousel =======
+			if (isCarousel) {
+				try {
+					const encoded = proto.Message.encode(message).finish()
+					const decoded = proto.Message.decode(encoded)
+					// Check both direct and viewOnceMessage-wrapped carousel
+					const decodedInteractive = decoded.interactiveMessage || decoded.viewOnceMessage?.message?.interactiveMessage
+					const hasCarousel = !!decodedInteractive?.carouselMessage
+					const cardsCount = decodedInteractive?.carouselMessage?.cards?.length || 0
+					const card0 = decodedInteractive?.carouselMessage?.cards?.[0]
+					const card0Header = card0?.header
+					const card0HasImage = !!card0Header?.imageMessage
+					const card0HasThumb = !!(card0Header?.imageMessage as any)?.jpegThumbnail
+					const card0HasNativeFlow = !!card0?.nativeFlowMessage
+					const card0ButtonCount = card0?.nativeFlowMessage?.buttons?.length || 0
+					logger.info(
+						{
+							msgId,
+							encodedSize: encoded.length,
+							hasViewOnceMessage: !!decoded.viewOnceMessage,
+							hasInteractiveMessage: !!decodedInteractive,
+							hasCarouselAfterDecode: hasCarousel,
+							cardsCount,
+							card0: {
+								hasHeader: !!card0Header,
+								title: card0Header?.title,
+								subtitle: card0Header?.subtitle,
+								hasMediaAttachment: card0Header?.hasMediaAttachment,
+								hasImageMessage: card0HasImage,
+								hasJpegThumbnail: card0HasThumb,
+								imgHeight: (card0Header?.imageMessage as any)?.height,
+								imgWidth: (card0Header?.imageMessage as any)?.width,
+								hasBody: !!card0?.body?.text,
+								hasFooter: !!card0?.footer?.text,
+								hasNativeFlow: card0HasNativeFlow,
+								buttonCount: card0ButtonCount
+							}
+						},
+						'[ROUNDTRIP] Protobuf encode→decode verification'
+					)
+				} catch (err) {
+					logger.error({ msgId, err: (err as Error).message }, '[ROUNDTRIP] Failed to verify protobuf encoding')
+				}
+			}
+
+			// ======= PROTOCOL INTERCEPTOR: Dump complete stanza for debugging =======
+			if (buttonType || isCarousel) {
+				const dumpBinaryNode = (node: any, indent = 0): string => {
+					if (!node) return ''
+					const pad = '  '.repeat(indent)
+					const tag = node.tag || '?'
+					const attrs = node.attrs ? Object.entries(node.attrs)
+						.filter(([_, v]) => v !== undefined && v !== null)
+						.map(([k, v]) => `${k}="${v}"`)
+						.join(' ') : ''
+					const attrStr = attrs ? ` ${attrs}` : ''
+
+					if (!node.content) return `${pad}<${tag}${attrStr}/>`
+					if (Buffer.isBuffer(node.content) || node.content instanceof Uint8Array) {
+						return `${pad}<${tag}${attrStr}>[binary ${node.content.length} bytes]</${tag}>`
+					}
+					if (Array.isArray(node.content)) {
+						const children = node.content.map((c: any) => dumpBinaryNode(c, indent + 1)).join('\n')
+						return `${pad}<${tag}${attrStr}>\n${children}\n${pad}</${tag}>`
+					}
+					return `${pad}<${tag}${attrStr}>${String(node.content).slice(0, 100)}</${tag}>`
+				}
+
+				// Dump protobuf message structure (which fields are set)
+				const protoFields: string[] = []
+				const dumpProtoFields = (obj: any, prefix = '') => {
+					if (!obj || typeof obj !== 'object') return
+					for (const [key, value] of Object.entries(obj)) {
+						if (value === null || value === undefined) continue
+						if (Buffer.isBuffer(value) || value instanceof Uint8Array) {
+							protoFields.push(`${prefix}${key}: [binary ${(value as any).length}b]`)
+						} else if (Array.isArray(value)) {
+							protoFields.push(`${prefix}${key}: [array ${value.length} items]`)
+							if (value.length > 0 && typeof value[0] === 'object') {
+								dumpProtoFields(value[0], `${prefix}${key}[0].`)
+							}
+						} else if (typeof value === 'object') {
+							protoFields.push(`${prefix}${key}:`)
+							dumpProtoFields(value, `${prefix}  `)
+						} else {
+							const strVal = String(value).slice(0, 200)
+							protoFields.push(`${prefix}${key}: ${strVal}`)
+						}
+					}
+				}
+				dumpProtoFields(message)
+
+				const stanzaDump = dumpBinaryNode(stanza)
+				logger.info(
+					{
+						msgId,
+						to: destinationJid,
+						buttonType: buttonType || 'carousel',
+						stanzaXML: '\n' + stanzaDump,
+						protobufMessage: '\n' + protoFields.join('\n')
+					},
+					'[PROTOCOL-DUMP] Complete stanza and protobuf before send'
+				)
+			}
+			// ======= END PROTOCOL INTERCEPTOR =======
 
 			await sendNode(stanza)
 
