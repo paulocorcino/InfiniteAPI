@@ -683,7 +683,7 @@ export const generateCarouselMessage = async (
 	)
 
 	// Build the interactive message with carousel
-	// Match Pastorini's EXACT working structure:
+	// Known working structure:
 	// - Direct interactiveMessage at root (NO viewOnceMessage wrapper)
 	// - Root header with title + hasMediaAttachment: false
 	// - messageVersion: 1 in carouselMessage

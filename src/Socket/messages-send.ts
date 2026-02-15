@@ -848,7 +848,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		// Convert nativeFlowMessage with single_select to direct listMessage (legacy format)
 		// This is required because WhatsApp expects listMessage format with biz > list node
 		// The viewOnceMessage > interactiveMessage > nativeFlowMessage wrapper causes error 479
-		// Reference: Pastorini sends as direct listMessage and it works on phone + web
+		// Reference: direct listMessage works on phone + web
 		const innerMsg = message.viewOnceMessage?.message
 		const nativeFlow = innerMsg?.interactiveMessage?.nativeFlowMessage
 		if (nativeFlow?.buttons?.length) {
@@ -1252,7 +1252,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			const isCarousel = isCarouselMessage(message)
 
 			// Collect biz/bot nodes to append AFTER device-identity and tctoken
-			// Pastorini order: participants → device-identity → tctoken → biz
+			// Stanza order: participants → device-identity → tctoken → biz
 			// The biz node MUST be last for WhatsApp Web carousel rendering
 			const deferredNodes: BinaryNode[] = []
 
@@ -1317,7 +1317,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					const isCTAOnly = hasCTA && !hasQuickReply
 
 					// For listMessage (legacy format), use direct <list> tag
-					// This matches pastorini's working implementation
+					// This matches the known working implementation
 					if (buttonType === 'list') {
 						deferredNodes.push({
 							tag: 'biz',
@@ -1475,7 +1475,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				}
 			}
 
-			// Pastorini's working carousel includes tctoken in stanza
+			// Working carousel includes tctoken in stanza
 			const contactTcTokenData =
 				!isGroup && !isRetryResend && !isStatus ? await authState.keys.get('tctoken', [destinationJid]) : {}
 
@@ -1494,7 +1494,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			}
 
 			// Append deferred biz/bot nodes LAST (after device-identity, tctoken)
-			// Pastorini order: participants → device-identity → tctoken → biz
+			// Stanza order: participants → device-identity → tctoken → biz
 			if (deferredNodes.length > 0) {
 				;(stanza.content as BinaryNode[]).push(...deferredNodes)
 			}
@@ -2096,7 +2096,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			const userJid = authState.creds.me!.id
 
 			// Special path for carousel: call relayMessage directly with plain JS object
-			// This matches Pastorini's working approach:
+			// This matches the known working approach:
 			// 1. Build message as plain JS object (not proto instance)
 			// 2. Pass directly to relayMessage (no WAProto.Message.fromObject/create)
 			// 3. protobuf encode() handles plain objects correctly during serialization
