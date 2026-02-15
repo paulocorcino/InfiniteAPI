@@ -1536,12 +1536,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					if (!node) return ''
 					const pad = '  '.repeat(indent)
 					const tag = node.tag || '?'
-					const attrEntries = node.attrs
-						? Object.entries(node.attrs).filter(([, v]) => v !== undefined && v !== null)
-						: []
-					const attrStr = attrEntries.length > 0
-						? ' ' + attrEntries.map(([k, v]) => `${k}="${v}"`).join(' ')
-						: ''
+					const attrEntries = node.attrs ? Object.entries(node.attrs).filter(([, v]) => v != null) : []
+					const attrStr = attrEntries.length > 0 ? ' ' + attrEntries.map(([k, v]) => `${k}="${v}"`).join(' ') : ''
 
 					if (!node.content) return `${pad}<${tag}${attrStr}/>`
 

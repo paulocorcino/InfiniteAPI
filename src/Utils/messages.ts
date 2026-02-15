@@ -651,25 +651,23 @@ export const generateCarouselMessage = async (
 			if (hasMedia && mediaOptions) {
 				if (card.image) {
 					const { imageMessage } = await prepareWAMessageMedia({ image: card.image }, mediaOptions)
-					if (imageMessage) {
-						// Ensure jpegThumbnail, height, width are present (required for WhatsApp Web rendering)
-						if (!imageMessage.jpegThumbnail) {
-							mediaOptions.logger?.warn(
-								{ cardTitle: card.title },
-								'[CAROUSEL] imageMessage missing jpegThumbnail - Web may not render'
-							)
-						}
-
-						if (!imageMessage.height || !imageMessage.width) {
-							mediaOptions.logger?.warn(
-								{ cardTitle: card.title, height: imageMessage.height, width: imageMessage.width },
-								'[CAROUSEL] imageMessage missing dimensions - setting defaults'
-							)
-							// Set default dimensions if missing
-							if (!imageMessage.height) imageMessage.height = 500
-							if (!imageMessage.width) imageMessage.width = 500
-						}
+					// Validate image fields needed for WhatsApp rendering
+					if (imageMessage && !imageMessage.jpegThumbnail) {
+						mediaOptions.logger?.warn(
+							{ cardTitle: card.title },
+							'[CAROUSEL] imageMessage missing jpegThumbnail - Web may not render'
+						)
 					}
+
+					if (imageMessage && (!imageMessage.height || !imageMessage.width)) {
+						mediaOptions.logger?.warn(
+							{ cardTitle: card.title, height: imageMessage.height, width: imageMessage.width },
+							'[CAROUSEL] imageMessage missing dimensions - setting defaults'
+						)
+						if (!imageMessage.height) imageMessage.height = 500
+						if (!imageMessage.width) imageMessage.width = 500
+					}
+
 					header.imageMessage = imageMessage
 				} else if (card.video) {
 					const { videoMessage } = await prepareWAMessageMedia({ video: card.video }, mediaOptions)
