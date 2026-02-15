@@ -495,7 +495,7 @@ export const generateButtonMessage = async (
 	options: ButtonMessageOptions,
 	mediaOptions?: MessageContentGenerationOptions
 ): Promise<WAMessageContent> => {
-	const { buttons, text, footer, headerTitle, headerImage, headerVideo, messageVersion = 2 } = options
+	const { buttons, text, footer, headerTitle, headerImage, headerVideo } = options
 
 	if (!buttons || buttons.length === 0) {
 		throw new Boom('At least one button is required', { statusCode: 400 })
@@ -534,7 +534,7 @@ export const generateButtonMessage = async (
 		throw new Boom('mediaOptions required for processing header media', { statusCode: 400 })
 	}
 
-	// Build the interactive message
+	// Build the interactive message (used for CTA buttons: url, copy, call)
 	const interactiveMessage: proto.Message.IInteractiveMessage = {
 		body: { text: text || '' },
 		footer: footer ? { text: footer } : undefined,
@@ -542,11 +542,11 @@ export const generateButtonMessage = async (
 		nativeFlowMessage: {
 			buttons: formattedButtons,
 			messageParamsJson: JSON.stringify({}),
-			messageVersion
+			messageVersion: 2
 		}
 	}
 
-	// Wrap in viewOnceMessage for better compatibility
+	// Wrap in viewOnceMessage for Web/Android compatibility
 	return {
 		viewOnceMessage: {
 			message: {
@@ -651,6 +651,23 @@ export const generateCarouselMessage = async (
 			if (hasMedia && mediaOptions) {
 				if (card.image) {
 					const { imageMessage } = await prepareWAMessageMedia({ image: card.image }, mediaOptions)
+					// Validate image fields needed for WhatsApp rendering
+					if (imageMessage && !imageMessage.jpegThumbnail) {
+						mediaOptions.logger?.warn(
+							{ cardTitle: card.title },
+							'[CAROUSEL] imageMessage missing jpegThumbnail - Web may not render'
+						)
+					}
+
+					if (imageMessage && (!imageMessage.height || !imageMessage.width)) {
+						mediaOptions.logger?.warn(
+							{ cardTitle: card.title, height: imageMessage.height, width: imageMessage.width },
+							'[CAROUSEL] imageMessage missing dimensions - setting defaults'
+						)
+						if (!imageMessage.height) imageMessage.height = 500
+						if (!imageMessage.width) imageMessage.width = 500
+					}
+
 					header.imageMessage = imageMessage
 				} else if (card.video) {
 					const { videoMessage } = await prepareWAMessageMedia({ video: card.video }, mediaOptions)
@@ -693,6 +710,10 @@ export const generateCarouselMessage = async (
 				index: i,
 				hasMedia: c.header?.hasMediaAttachment,
 				mediaType: c.header?.imageMessage ? 'image' : c.header?.videoMessage ? 'video' : 'none',
+				hasSubtitle: c.header?.subtitle !== undefined,
+				hasJpegThumbnail: !!c.header?.imageMessage?.jpegThumbnail,
+				imgHeight: c.header?.imageMessage?.height,
+				imgWidth: c.header?.imageMessage?.width,
 				hasBody: !!c.body?.text,
 				hasFooter: !!c.footer?.text,
 				buttonsCount: c.nativeFlowMessage?.buttons?.length || 0
@@ -703,14 +724,10 @@ export const generateCarouselMessage = async (
 		'[CAROUSEL] Structure summary'
 	)
 
-	// Pastorini sends interactiveMessage DIRECTLY at root level (NO viewOnceMessage wrapper)
-	// messageKeys: ['interactiveMessage'] - confirmed from Pastorini's working logs
-	// messageContextInfo at the message level for multi-device rendering
+	// Direct interactiveMessage at root - NO viewOnceMessage, NO messageContextInfo
+	// viewOnceMessage breaks iOS, messageContextInfo breaks iOS
+	// Web shows header-only fallback (carousel is mobile-only on WhatsApp)
 	return {
-		messageContextInfo: {
-			deviceListMetadata: {},
-			deviceListMetadataVersion: 2
-		},
 		interactiveMessage
 	}
 }
@@ -1178,18 +1195,47 @@ export const generateWAMessageContent = async (
 	// Check for nativeButtons first - this is the recommended modern approach
 	if (hasNonNullishProperty(message, 'nativeButtons')) {
 		const nativeMsg = message as any
-		const buttonOptions: ButtonMessageOptions = {
-			buttons: nativeMsg.nativeButtons,
-			text: nativeMsg.text || '',
-			footer: nativeMsg.footer,
-			headerTitle: nativeMsg.headerTitle,
-			headerImage: nativeMsg.headerImage,
-			headerVideo: nativeMsg.headerVideo
+		const buttons = nativeMsg.nativeButtons as any[]
+
+		if (!buttons || buttons.length === 0) {
+			throw new Boom('nativeButtons requires at least one button', { statusCode: 400 })
 		}
-		// Pass options for media processing if header has image/video
-		const generated = await generateButtonMessage(buttonOptions, options)
-		m.viewOnceMessage = generated.viewOnceMessage
-		options.logger?.info('Sending nativeFlowMessage with viewOnceMessage wrapper')
+
+		// Check if ALL buttons are quick_reply (type: 'reply')
+		const allQuickReply = buttons.every((btn: any) => btn.type === 'reply')
+
+		if (allQuickReply) {
+			// Use legacy buttonsMessage format — works on iOS + Android + Web
+			const hasHeaderTitle = !!nativeMsg.headerTitle
+			const buttonsMessage: proto.Message.IButtonsMessage = {
+				contentText: nativeMsg.text || '',
+				footerText: nativeMsg.footer || undefined,
+				headerType: hasHeaderTitle
+					? proto.Message.ButtonsMessage.HeaderType.TEXT
+					: proto.Message.ButtonsMessage.HeaderType.EMPTY,
+				...(hasHeaderTitle ? { text: nativeMsg.headerTitle } : {})
+			}
+			buttonsMessage.buttons = buttons.map((btn: any, idx: number) => ({
+				buttonId: btn.id || `btn_${idx}`,
+				buttonText: { displayText: btn.text || `Button ${idx + 1}` },
+				type: proto.Message.ButtonsMessage.Button.Type.RESPONSE
+			}))
+			m.buttonsMessage = buttonsMessage
+			options.logger?.info('Sending quick_reply as legacy buttonsMessage (iOS compatible)')
+		} else {
+			// CTA buttons (url, copy, call) — use nativeFlowMessage
+			const buttonOptions: ButtonMessageOptions = {
+				buttons,
+				text: nativeMsg.text || '',
+				footer: nativeMsg.footer,
+				headerTitle: nativeMsg.headerTitle,
+				headerImage: nativeMsg.headerImage,
+				headerVideo: nativeMsg.headerVideo
+			}
+			const generated = await generateButtonMessage(buttonOptions, options)
+			m.viewOnceMessage = generated.viewOnceMessage
+			options.logger?.info('Sending CTA buttons as nativeFlowMessage with viewOnceMessage wrapper')
+		}
 	}
 	// Check for nativeCarousel
 	else if (hasNonNullishProperty(message, 'nativeCarousel')) {
@@ -1201,11 +1247,10 @@ export const generateWAMessageContent = async (
 		}
 		// Pass options for media processing if cards have images/videos
 		const generated = await generateCarouselMessage(carouselOptions, options)
-		// Pastorini sends interactiveMessage DIRECTLY at root (no viewOnceMessage wrapper)
-		// messageKeys: ['interactiveMessage'] - confirmed from Pastorini's working logs
+		// Send carousel as direct interactiveMessage (no viewOnceMessage wrapper)
+		// viewOnceMessage breaks iOS; messageContextInfo breaks iOS delivery
 		m.interactiveMessage = generated.interactiveMessage
-		m.messageContextInfo = generated.messageContextInfo
-		options.logger?.info('Sending carousel as direct interactiveMessage (Pastorini approach, no viewOnce wrapper)')
+		options.logger?.info('Sending carousel as direct interactiveMessage')
 		// Return plain JS object - no fromObject() to avoid corrupting nested carousel structures
 		return m
 	}

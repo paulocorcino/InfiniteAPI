@@ -552,8 +552,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		const meLid = authState.creds.me?.lid
 		const meLidUser = meLid ? jidDecode(meLid)?.user : null
 
-		const encryptionPromises = (patchedMessages as any).map(
-			async ({ recipientJid: jid, message: patchedMessage }: any) => {
+		const encryptionPromises = (patchedMessages as { recipientJid: string; message: proto.IMessage }[]).map(
+			async ({ recipientJid: jid, message: patchedMessage }: { recipientJid: string; message: proto.IMessage }) => {
 				try {
 					if (!jid) return null
 
@@ -647,7 +647,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			// Check if it's a carousel with nativeFlowMessage buttons in cards
 			if (message.interactiveMessage.carouselMessage?.cards?.length) {
 				const hasNativeFlowButtons = message.interactiveMessage.carouselMessage.cards.some(
-					(card: any) => card?.nativeFlowMessage?.buttons?.length
+					(card: proto.Message.IInteractiveMessage) => card?.nativeFlowMessage?.buttons?.length
 				)
 				if (hasNativeFlowButtons) {
 					return 'native_flow'
@@ -1251,6 +1251,11 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			const isCatalog = isCatalogMessage(message)
 			const isCarousel = isCarouselMessage(message)
 
+			// Collect biz/bot nodes to append AFTER device-identity and tctoken
+			// Pastorini order: participants → device-identity → tctoken → biz
+			// The biz node MUST be last for WhatsApp Web carousel rendering
+			const deferredNodes: BinaryNode[] = []
+
 			// EXPERIMENTAL: Try biz node injection for ALL interactive messages including catalog
 			// Previously we skipped catalog messages but they weren't rendering properly
 			if (buttonType && enableInteractiveMessages) {
@@ -1265,7 +1270,14 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					message.listMessage ||
 					message.viewOnceMessage?.message?.listMessage ||
 					message.viewOnceMessageV2?.message?.listMessage
-				const nativeFlowButtons = interactiveMsg?.nativeFlowMessage?.buttons || []
+				// For carousel messages, buttons are inside each card's nativeFlowMessage
+				let nativeFlowButtons = interactiveMsg?.nativeFlowMessage?.buttons || []
+				if (nativeFlowButtons.length === 0 && interactiveMsg?.carouselMessage?.cards?.length) {
+					nativeFlowButtons = interactiveMsg.carouselMessage.cards.flatMap(
+						(card: proto.Message.IInteractiveMessage) => card?.nativeFlowMessage?.buttons || []
+					)
+				}
+
 				const isListDetected = isListNativeFlow(message)
 
 				// Log full button details including buttonParamsJson for debugging
@@ -1307,7 +1319,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					// For listMessage (legacy format), use direct <list> tag
 					// This matches pastorini's working implementation
 					if (buttonType === 'list') {
-						;(stanza.content as BinaryNode[]).push({
+						deferredNodes.push({
 							tag: 'biz',
 							attrs: {},
 							content: [
@@ -1325,9 +1337,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							'[EXPERIMENTAL] Injected biz node for listMessage (legacy format)'
 						)
 					} else {
-						// Use 'mixed' as the native_flow name - this is required for message delivery
-						// Note: '' (empty) causes error 405 rejection from WhatsApp server
-						// Special flows (payment, mpm, order) use specific names
 						const SPECIAL_FLOW_NAMES: Record<string, string> = {
 							review_and_pay: 'payment_info',
 							payment_info: 'payment_info',
@@ -1342,10 +1351,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							'[EXPERIMENTAL] Determined native_flow name based on button types'
 						)
 
-						// Use nested structure: biz > interactive > native_flow
-						// For buttons, carousels, and other interactive messages
 						const interactiveType = 'native_flow'
-						;(stanza.content as BinaryNode[]).push({
+						deferredNodes.push({
 							tag: 'biz',
 							attrs: {},
 							content: [
@@ -1369,11 +1376,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						})
 					}
 
-					// Bot node (<bot biz_bot="1"/>) MUST NOT be injected for native_flow buttons
-					// It prevents WhatsApp Web/Desktop from rendering ALL button types
-					// (both quick_reply and CTA buttons). Confirmed by testing:
-					// - CTA buttons without bot node: works on Web ✅
-					// - quick_reply buttons with bot node: only smartphone, not Web ❌
+					// Bot node — skip for native_flow buttons (breaks Web rendering)
 					const isNativeFlowButtons = buttonType === 'native_flow'
 
 					const isPrivateUserChat =
@@ -1381,7 +1384,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						!isJidBot(destinationJid)
 
 					if (isPrivateUserChat && !isCarousel && !isCatalog && buttonType !== 'list' && !isNativeFlowButtons) {
-						;(stanza.content as BinaryNode[]).push({
+						deferredNodes.push({
 							tag: 'bot',
 							attrs: { biz_bot: '1' }
 						})
@@ -1490,7 +1493,78 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				;(stanza.content as BinaryNode[]).push(...additionalNodes)
 			}
 
+			// Append deferred biz/bot nodes LAST (after device-identity, tctoken)
+			// Pastorini order: participants → device-identity → tctoken → biz
+			if (deferredNodes.length > 0) {
+				;(stanza.content as BinaryNode[]).push(...deferredNodes)
+			}
+
 			logger.debug({ msgId }, `sending message to ${participants.length} devices`)
+
+			// ======= PROTOBUF ROUNDTRIP TEST: Verify encoding preserves carousel =======
+			// Only runs at debug level to avoid performance overhead in production
+			if (isCarousel && logger.level === 'debug') {
+				try {
+					const encoded = proto.Message.encode(message).finish()
+					const decoded = proto.Message.decode(encoded)
+					const decodedInteractive = decoded.interactiveMessage || decoded.viewOnceMessage?.message?.interactiveMessage
+					const cardsCount = decodedInteractive?.carouselMessage?.cards?.length || 0
+					const card0 = decodedInteractive?.carouselMessage?.cards?.[0]
+					const card0Header = card0?.header
+
+					logger.debug(
+						{
+							msgId,
+							encodedSize: encoded.length,
+							hasCarouselAfterDecode: !!decodedInteractive?.carouselMessage,
+							cardsCount,
+							card0Title: card0Header?.title,
+							card0HasImage: !!card0Header?.imageMessage,
+							card0Buttons: card0?.nativeFlowMessage?.buttons?.length || 0
+						},
+						'[ROUNDTRIP] Protobuf encode→decode verification'
+					)
+				} catch (err) {
+					logger.error({ msgId, err: (err as Error).message }, '[ROUNDTRIP] Failed to verify protobuf encoding')
+				}
+			}
+
+			// ======= PROTOCOL INTERCEPTOR: Dump complete stanza for debugging =======
+			// Only runs at debug level to avoid logging sensitive content in production
+			if ((buttonType || isCarousel) && logger.level === 'debug') {
+				const dumpBinaryNode = (node: BinaryNode, indent = 0): string => {
+					if (!node) return ''
+					const pad = '  '.repeat(indent)
+					const tag = node.tag || '?'
+					const filteredAttrs = ([, v]: [string, unknown]) => v !== undefined && v !== null
+					const attrEntries = node.attrs ? Object.entries(node.attrs).filter(filteredAttrs) : []
+					const attrStr = attrEntries.length > 0 ? ' ' + attrEntries.map(([k, v]) => `${k}="${v}"`).join(' ') : ''
+
+					if (!node.content) return `${pad}<${tag}${attrStr}/>`
+
+					if (Buffer.isBuffer(node.content) || node.content instanceof Uint8Array) {
+						return `${pad}<${tag}${attrStr}>[binary ${node.content.length} bytes]</${tag}>`
+					}
+
+					if (Array.isArray(node.content)) {
+						const children = node.content.map((c: BinaryNode) => dumpBinaryNode(c, indent + 1)).join('\n')
+						return `${pad}<${tag}${attrStr}>\n${children}\n${pad}</${tag}>`
+					}
+
+					return `${pad}<${tag}${attrStr}>${String(node.content).slice(0, 100)}</${tag}>`
+				}
+
+				logger.debug(
+					{
+						msgId,
+						to: destinationJid,
+						buttonType: buttonType || 'carousel',
+						stanzaXML: '\n' + dumpBinaryNode(stanza)
+					},
+					'[PROTOCOL-DUMP] Stanza structure before send'
+				)
+			}
+			// ======= END PROTOCOL INTERCEPTOR =======
 
 			await sendNode(stanza)
 
