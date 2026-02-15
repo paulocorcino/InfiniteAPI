@@ -517,7 +517,6 @@ export const generateButtonMessage = async (
 	const hasMedia = !!(headerImage || headerVideo)
 	const header: proto.Message.InteractiveMessage.IHeader = {
 		title: hasMedia ? '' : headerTitle || '',
-		subtitle: '',
 		hasMediaAttachment: hasMedia
 	}
 
@@ -547,13 +546,10 @@ export const generateButtonMessage = async (
 	}
 
 	// Wrap in viewOnceMessage for Web/Android compatibility
+	// NOTE: messageContextInfo removed - breaks iOS delivery
 	return {
 		viewOnceMessage: {
 			message: {
-				messageContextInfo: {
-					deviceListMetadata: {},
-					deviceListMetadataVersion: 2
-				},
 				interactiveMessage
 			}
 		}
