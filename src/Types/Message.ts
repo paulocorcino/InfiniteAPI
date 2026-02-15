@@ -467,6 +467,8 @@ export type CarouselCardInput = {
 export type CarouselMessageOptions = {
 	/** Cards in the carousel (2-10 recommended) */
 	cards: CarouselCardInput[]
+	/** Header title (displayed once above the carousel) */
+	title?: string
 	/** Main body text */
 	text?: string
 	/** Footer text */
