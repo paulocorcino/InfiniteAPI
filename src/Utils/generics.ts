@@ -366,10 +366,20 @@ const CODE_MAP: { [_: string]: DisconnectReason } = {
 export const getErrorCodeFromStreamError = (node: BinaryNode) => {
 	const [reasonNode] = getAllBinaryNodeChildren(node)
 	let reason = reasonNode?.tag || 'unknown'
-	const statusCode = +(node.attrs.code || CODE_MAP[reason] || DisconnectReason.badSession)
 
-	if (statusCode === DisconnectReason.restartRequired) {
+	// device_removed is a specific conflict type that means full logout
+	if(reason === 'conflict' && reasonNode?.attrs?.type === 'device_removed') {
+		return { reason: 'device_removed', statusCode: DisconnectReason.loggedOut }
+	}
+
+	const statusCode = +(reasonNode?.attrs?.code || node.attrs.code || CODE_MAP[reason] || DisconnectReason.badSession)
+
+	if(statusCode === DisconnectReason.restartRequired) {
 		reason = 'restart required'
+	}
+
+	if(statusCode === DisconnectReason.sessionInvalidated) {
+		reason = 'session invalidated'
 	}
 
 	return {

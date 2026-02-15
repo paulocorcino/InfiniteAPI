@@ -111,6 +111,13 @@ export const NACK_REASONS = {
 	CorruptedSession: 553
 }
 
+export const SERVER_ERROR_CODES = {
+	MissingTcToken: '463',
+	SmaxInvalid: '479',
+	StaleGroupAddressingMode: '421',
+	NewChatMessagesCapped: '475'
+}
+
 type MessageType =
 	| 'chat'
 	| 'peer_broadcast'
