@@ -659,6 +659,7 @@ export const generateCarouselMessage = async (
 								'[CAROUSEL] imageMessage missing jpegThumbnail - Web may not render'
 							)
 						}
+
 						if (!imageMessage.height || !imageMessage.width) {
 							mediaOptions.logger?.warn(
 								{ cardTitle: card.title, height: imageMessage.height, width: imageMessage.width },
@@ -1198,15 +1199,23 @@ export const generateWAMessageContent = async (
 		const nativeMsg = message as any
 		const buttons = nativeMsg.nativeButtons as any[]
 
+		if (!buttons || buttons.length === 0) {
+			throw new Boom('nativeButtons requires at least one button', { statusCode: 400 })
+		}
+
 		// Check if ALL buttons are quick_reply (type: 'reply')
 		const allQuickReply = buttons.every((btn: any) => btn.type === 'reply')
 
 		if (allQuickReply) {
 			// Use legacy buttonsMessage format — works on iOS + Android + Web
+			const hasHeaderTitle = !!nativeMsg.headerTitle
 			const buttonsMessage: proto.Message.IButtonsMessage = {
 				contentText: nativeMsg.text || '',
 				footerText: nativeMsg.footer || undefined,
-				headerType: proto.Message.ButtonsMessage.HeaderType.EMPTY
+				headerType: hasHeaderTitle
+					? proto.Message.ButtonsMessage.HeaderType.TEXT
+					: proto.Message.ButtonsMessage.HeaderType.EMPTY,
+				...(hasHeaderTitle ? { text: nativeMsg.headerTitle } : {})
 			}
 			buttonsMessage.buttons = buttons.map((btn: any, idx: number) => ({
 				buttonId: btn.id || `btn_${idx}`,
@@ -1240,9 +1249,8 @@ export const generateWAMessageContent = async (
 		}
 		// Pass options for media processing if cards have images/videos
 		const generated = await generateCarouselMessage(carouselOptions, options)
-		// Wrap carousel in viewOnceMessage for Web/Desktop compatibility
-		// Same wrapper format as CTA buttons which render correctly on all platforms
-		// Direct interactiveMessage - no viewOnceMessage, no messageContextInfo
+		// Send carousel as direct interactiveMessage (no viewOnceMessage wrapper)
+		// viewOnceMessage breaks iOS; messageContextInfo breaks iOS delivery
 		m.interactiveMessage = generated.interactiveMessage
 		options.logger?.info('Sending carousel as direct interactiveMessage')
 		// Return plain JS object - no fromObject() to avoid corrupting nested carousel structures

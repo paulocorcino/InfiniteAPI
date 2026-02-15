@@ -552,8 +552,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		const meLid = authState.creds.me?.lid
 		const meLidUser = meLid ? jidDecode(meLid)?.user : null
 
-		const encryptionPromises = (patchedMessages as any).map(
-			async ({ recipientJid: jid, message: patchedMessage }: any) => {
+		const encryptionPromises = (patchedMessages as { recipientJid: string; message: proto.IMessage }[]).map(
+			async ({ recipientJid: jid, message: patchedMessage }: { recipientJid: string; message: proto.IMessage }) => {
 				try {
 					if (!jid) return null
 
@@ -647,7 +647,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			// Check if it's a carousel with nativeFlowMessage buttons in cards
 			if (message.interactiveMessage.carouselMessage?.cards?.length) {
 				const hasNativeFlowButtons = message.interactiveMessage.carouselMessage.cards.some(
-					(card: any) => card?.nativeFlowMessage?.buttons?.length
+					(card: proto.Message.IInteractiveMessage) => card?.nativeFlowMessage?.buttons?.length
 				)
 				if (hasNativeFlowButtons) {
 					return 'native_flow'
@@ -1274,9 +1274,10 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				let nativeFlowButtons = interactiveMsg?.nativeFlowMessage?.buttons || []
 				if (nativeFlowButtons.length === 0 && interactiveMsg?.carouselMessage?.cards?.length) {
 					nativeFlowButtons = interactiveMsg.carouselMessage.cards.flatMap(
-						(card: any) => card?.nativeFlowMessage?.buttons || []
+						(card: proto.Message.IInteractiveMessage) => card?.nativeFlowMessage?.buttons || []
 					)
 				}
+
 				const isListDetected = isListNativeFlow(message)
 
 				// Log full button details including buttonParamsJson for debugging
@@ -1501,42 +1502,25 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			logger.debug({ msgId }, `sending message to ${participants.length} devices`)
 
 			// ======= PROTOBUF ROUNDTRIP TEST: Verify encoding preserves carousel =======
-			if (isCarousel) {
+			// Only runs at debug level to avoid performance overhead in production
+			if (isCarousel && logger.level === 'debug') {
 				try {
 					const encoded = proto.Message.encode(message).finish()
 					const decoded = proto.Message.decode(encoded)
-					// Check both direct and viewOnceMessage-wrapped carousel
 					const decodedInteractive = decoded.interactiveMessage || decoded.viewOnceMessage?.message?.interactiveMessage
-					const hasCarousel = !!decodedInteractive?.carouselMessage
 					const cardsCount = decodedInteractive?.carouselMessage?.cards?.length || 0
 					const card0 = decodedInteractive?.carouselMessage?.cards?.[0]
 					const card0Header = card0?.header
-					const card0HasImage = !!card0Header?.imageMessage
-					const card0HasThumb = !!(card0Header?.imageMessage as any)?.jpegThumbnail
-					const card0HasNativeFlow = !!card0?.nativeFlowMessage
-					const card0ButtonCount = card0?.nativeFlowMessage?.buttons?.length || 0
-					logger.info(
+
+					logger.debug(
 						{
 							msgId,
 							encodedSize: encoded.length,
-							hasViewOnceMessage: !!decoded.viewOnceMessage,
-							hasInteractiveMessage: !!decodedInteractive,
-							hasCarouselAfterDecode: hasCarousel,
+							hasCarouselAfterDecode: !!decodedInteractive?.carouselMessage,
 							cardsCount,
-							card0: {
-								hasHeader: !!card0Header,
-								title: card0Header?.title,
-								subtitle: card0Header?.subtitle,
-								hasMediaAttachment: card0Header?.hasMediaAttachment,
-								hasImageMessage: card0HasImage,
-								hasJpegThumbnail: card0HasThumb,
-								imgHeight: (card0Header?.imageMessage as any)?.height,
-								imgWidth: (card0Header?.imageMessage as any)?.width,
-								hasBody: !!card0?.body?.text,
-								hasFooter: !!card0?.footer?.text,
-								hasNativeFlow: card0HasNativeFlow,
-								buttonCount: card0ButtonCount
-							}
+							card0Title: card0Header?.title,
+							card0HasImage: !!card0Header?.imageMessage,
+							card0Buttons: card0?.nativeFlowMessage?.buttons?.length || 0
 						},
 						'[ROUNDTRIP] Protobuf encode→decode verification'
 					)
@@ -1546,62 +1530,41 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			}
 
 			// ======= PROTOCOL INTERCEPTOR: Dump complete stanza for debugging =======
-			if (buttonType || isCarousel) {
-				const dumpBinaryNode = (node: any, indent = 0): string => {
+			// Only runs at debug level to avoid logging sensitive content in production
+			if ((buttonType || isCarousel) && logger.level === 'debug') {
+				const dumpBinaryNode = (node: BinaryNode, indent = 0): string => {
 					if (!node) return ''
 					const pad = '  '.repeat(indent)
 					const tag = node.tag || '?'
-					const attrs = node.attrs ? Object.entries(node.attrs)
-						.filter(([_, v]) => v !== undefined && v !== null)
-						.map(([k, v]) => `${k}="${v}"`)
-						.join(' ') : ''
-					const attrStr = attrs ? ` ${attrs}` : ''
+					const attrEntries = node.attrs
+						? Object.entries(node.attrs).filter(([, v]) => v !== undefined && v !== null)
+						: []
+					const attrStr = attrEntries.length > 0
+						? ' ' + attrEntries.map(([k, v]) => `${k}="${v}"`).join(' ')
+						: ''
 
 					if (!node.content) return `${pad}<${tag}${attrStr}/>`
+
 					if (Buffer.isBuffer(node.content) || node.content instanceof Uint8Array) {
 						return `${pad}<${tag}${attrStr}>[binary ${node.content.length} bytes]</${tag}>`
 					}
+
 					if (Array.isArray(node.content)) {
-						const children = node.content.map((c: any) => dumpBinaryNode(c, indent + 1)).join('\n')
+						const children = node.content.map((c: BinaryNode) => dumpBinaryNode(c, indent + 1)).join('\n')
 						return `${pad}<${tag}${attrStr}>\n${children}\n${pad}</${tag}>`
 					}
+
 					return `${pad}<${tag}${attrStr}>${String(node.content).slice(0, 100)}</${tag}>`
 				}
 
-				// Dump protobuf message structure (which fields are set)
-				const protoFields: string[] = []
-				const dumpProtoFields = (obj: any, prefix = '') => {
-					if (!obj || typeof obj !== 'object') return
-					for (const [key, value] of Object.entries(obj)) {
-						if (value === null || value === undefined) continue
-						if (Buffer.isBuffer(value) || value instanceof Uint8Array) {
-							protoFields.push(`${prefix}${key}: [binary ${(value as any).length}b]`)
-						} else if (Array.isArray(value)) {
-							protoFields.push(`${prefix}${key}: [array ${value.length} items]`)
-							if (value.length > 0 && typeof value[0] === 'object') {
-								dumpProtoFields(value[0], `${prefix}${key}[0].`)
-							}
-						} else if (typeof value === 'object') {
-							protoFields.push(`${prefix}${key}:`)
-							dumpProtoFields(value, `${prefix}  `)
-						} else {
-							const strVal = String(value).slice(0, 200)
-							protoFields.push(`${prefix}${key}: ${strVal}`)
-						}
-					}
-				}
-				dumpProtoFields(message)
-
-				const stanzaDump = dumpBinaryNode(stanza)
-				logger.info(
+				logger.debug(
 					{
 						msgId,
 						to: destinationJid,
 						buttonType: buttonType || 'carousel',
-						stanzaXML: '\n' + stanzaDump,
-						protobufMessage: '\n' + protoFields.join('\n')
+						stanzaXML: '\n' + dumpBinaryNode(stanza)
 					},
-					'[PROTOCOL-DUMP] Complete stanza and protobuf before send'
+					'[PROTOCOL-DUMP] Stanza structure before send'
 				)
 			}
 			// ======= END PROTOCOL INTERCEPTOR =======
