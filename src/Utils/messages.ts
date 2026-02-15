@@ -591,7 +591,7 @@ export const generateCarouselMessage = async (
 	options: CarouselMessageOptions,
 	mediaOptions?: MessageContentGenerationOptions
 ): Promise<WAMessageContent> => {
-	const { cards, text, footer } = options
+	const { cards, title, text, footer } = options
 
 	if (!cards || cards.length < 2) {
 		throw new Boom('Carousel requires at least 2 cards', { statusCode: 400 })
@@ -689,7 +689,7 @@ export const generateCarouselMessage = async (
 	// - messageVersion: 1 in carouselMessage
 	// - Body and footer at root level
 	const interactiveMessage: proto.Message.IInteractiveMessage = {
-		header: { title: text || '', hasMediaAttachment: false },
+		header: { title: title || ' ', hasMediaAttachment: false },
 		body: { text: text || '' },
 		footer: footer ? { text: footer } : undefined,
 		carouselMessage: {
@@ -1238,6 +1238,7 @@ export const generateWAMessageContent = async (
 		const carouselMsg = message as any
 		const carouselOptions: CarouselMessageOptions = {
 			cards: carouselMsg.nativeCarousel.cards,
+			title: carouselMsg.nativeCarousel.title || carouselMsg.title,
 			text: carouselMsg.text,
 			footer: carouselMsg.footer
 		}
