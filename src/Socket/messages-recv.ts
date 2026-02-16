@@ -47,13 +47,14 @@ import {
 	MISSING_KEYS_ERROR_TEXT,
 	NACK_REASONS,
 	NO_MESSAGE_FOUND_ERROR_TEXT,
+	SERVER_ERROR_CODES,
 	normalizeMessageJids,
 	toNumber,
 	unixTimestampSeconds,
 	xmppPreKey,
 	xmppSignedPreKey
 } from '../Utils'
-import { logMessageReceived } from '../Utils/baileys-logger'
+import { logMessageReceived, logTcToken } from '../Utils/baileys-logger'
 import { makeMutex } from '../Utils/make-mutex'
 import {
 	metrics,
@@ -80,6 +81,7 @@ import {
 	jidNormalizedUser,
 	S_WHATSAPP_NET
 } from '../WABinary'
+import { isTcTokenExpired, resolveTcTokenJid } from '../Utils/tc-token-utils'
 import { extractGroupMetadata } from './groups'
 import { makeMessagesSocket } from './messages-send'
 
@@ -117,7 +119,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		sendReceipt,
 		uploadPreKeys,
 		sendPeerDataOperationMessage,
-		messageRetryManager
+		messageRetryManager,
+		getPrivacyTokens
 	} = sock
 
 	/** this mutex ensures that each retryRequest will wait for the previous one to finish */
@@ -147,6 +150,86 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	const identityAssertDebounce = new NodeCache<boolean>({ stdTTL: 5, useClones: false })
 
 	let sendActiveReceipts = false
+
+	// ======= tctoken index tracking for cross-session pruning =======
+	const TC_TOKEN_INDEX_KEY = '__index'
+	const TC_TOKEN_PRUNE_TS_KEY = '__prune_ts'
+	const tcTokenKnownJids = new Set<string>()
+	let tcTokenIndexSaveTimer: ReturnType<typeof setTimeout> | undefined
+	let lastTcTokenPruneTs = 0
+
+	// Load persisted JID index and last prune timestamp on startup
+	const tcTokenIndexLoaded = (async () => {
+		try {
+			const data = await authState.keys.get('tctoken', [TC_TOKEN_INDEX_KEY, TC_TOKEN_PRUNE_TS_KEY])
+			const entry = data[TC_TOKEN_INDEX_KEY]
+			if(entry?.token) {
+				const stored = JSON.parse(Buffer.from(entry.token).toString('utf8'))
+				if(Array.isArray(stored)) {
+					for(const jid of stored) tcTokenKnownJids.add(jid)
+				}
+			}
+
+			const pruneEntry = data[TC_TOKEN_PRUNE_TS_KEY]
+			if(pruneEntry?.timestamp) {
+				lastTcTokenPruneTs = Number(pruneEntry.timestamp)
+			}
+		} catch { /* first run or corrupt index — start fresh */ }
+	})()
+
+	/** Debounced save of the tctoken JID index (5s) */
+	const scheduleTcTokenIndexSave = () => {
+		if(tcTokenIndexSaveTimer) clearTimeout(tcTokenIndexSaveTimer)
+		tcTokenIndexSaveTimer = setTimeout(async () => {
+			try {
+				const arr = Array.from(tcTokenKnownJids)
+				await authState.keys.set({
+					tctoken: {
+						[TC_TOKEN_INDEX_KEY]: {
+							token: Buffer.from(JSON.stringify(arr), 'utf8'),
+							timestamp: unixTimestampSeconds().toString()
+						}
+					}
+				})
+			} catch(err) {
+				logger.debug({ err }, 'failed to persist tctoken index')
+			}
+		}, 5000)
+	}
+
+	/** Delete expired tctokens — runs at most once per 24h when coming online */
+	const pruneExpiredTcTokens = async () => {
+		await tcTokenIndexLoaded
+		const pruneSet: Record<string, null> = {}
+		const survivingJids: string[] = []
+
+		const jidsToCheck = Array.from(tcTokenKnownJids).filter(j => j !== TC_TOKEN_INDEX_KEY)
+		if(!jidsToCheck.length) return
+
+		try {
+			const allData = await authState.keys.get('tctoken', jidsToCheck)
+			for(const jid of jidsToCheck) {
+				const entry = allData[jid]
+				if(!entry?.token || isTcTokenExpired(entry.timestamp)) {
+					pruneSet[jid] = null
+				} else {
+					survivingJids.push(jid)
+				}
+			}
+		} catch {
+			return // batch read failed — skip this pruning cycle
+		}
+
+		const pruneCount = Object.keys(pruneSet).length
+		if(pruneCount > 0) {
+			await authState.keys.set({ tctoken: pruneSet })
+			tcTokenKnownJids.clear()
+			for(const jid of survivingJids) tcTokenKnownJids.add(jid)
+			scheduleTcTokenIndexSave()
+			logTcToken('prune', { pruned: pruneCount, remaining: survivingJids.length })
+		}
+	}
+	// ======= END tctoken index tracking =======
 
 	const fetchMessageHistory = async (
 		count: number,
@@ -633,7 +716,26 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				logger
 			})
 
-			if (result.action === 'no_identity_node') {
+			// When a session is refreshed (identity change), re-issue tctoken fire-and-forget
+			if(result.action === 'session_refreshed') {
+				const normalizedJid = jidNormalizedUser(from)
+				resolveTcTokenJid(
+					normalizedJid,
+					signalRepository.lidMapping.getLIDForPN.bind(signalRepository.lidMapping)
+				).then(async (tcJid) => {
+					const tcData = await authState.keys.get('tctoken', [tcJid])
+					const entry = tcData[tcJid]
+					if(entry?.token?.length && !isTcTokenExpired(entry.timestamp)) {
+						const senderTs = unixTimestampSeconds()
+						logTcToken('reissue', { jid: normalizedJid, reason: 'session_refreshed' })
+						getPrivacyTokens([normalizedJid], senderTs).catch(err => {
+							logTcToken('reissue_fail', { jid: normalizedJid, error: err?.message })
+						})
+					}
+				}).catch(() => { /* ignore resolution errors */ })
+			}
+
+			if(result.action === 'no_identity_node') {
 				logger.info({ node }, 'unknown encrypt notification')
 			}
 		}
@@ -958,28 +1060,45 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		const tokensNode = getBinaryNodeChild(node, 'tokens')
 		const from = jidNormalizedUser(node.attrs.from)
 
-		if (!tokensNode) return
+		if(!tokensNode) return
 
 		const tokenNodes = getBinaryNodeChildren(tokensNode, 'token')
+		const getLIDForPN = signalRepository.lidMapping.getLIDForPN.bind(signalRepository.lidMapping)
 
-		for (const tokenNode of tokenNodes) {
+		for(const tokenNode of tokenNodes) {
 			const { attrs, content } = tokenNode
 			const type = attrs.type
 			const timestamp = attrs.t
 
-			if (type === 'trusted_contact' && content instanceof Buffer) {
-				logger.debug(
-					{
-						from,
-						timestamp,
-						tcToken: content
-					},
-					'received trusted contact token'
-				)
+			if(type === 'trusted_contact' && content instanceof Uint8Array) {
+				// Resolve to LID for consistent storage key
+				const senderLid = attrs.sender_lid ? jidNormalizedUser(attrs.sender_lid) : undefined
+				const storageJid = senderLid || await resolveTcTokenJid(from, getLIDForPN)
+
+				// Timestamp monotonicity guard — only store if incoming >= existing
+				const existingData = await authState.keys.get('tctoken', [storageJid])
+				const existing = existingData[storageJid]
+				const existingTs = existing?.timestamp ? Number(existing.timestamp) : 0
+				const incomingTs = timestamp ? Number(timestamp) : 0
+				if(existingTs > 0 && incomingTs > 0 && existingTs > incomingTs) {
+					continue
+				}
 
 				await authState.keys.set({
-					tctoken: { [from]: { token: content, timestamp } }
+					tctoken: {
+						[storageJid]: {
+							...existing,
+							token: Buffer.from(content),
+							timestamp
+						}
+					}
 				})
+
+				logTcToken('stored', { jid: storageJid, from })
+
+				// Track JID for cross-session pruning
+				tcTokenKnownJids.add(storageJid)
+				scheduleTcTokenIndexSave()
 			}
 		}
 	}
@@ -1755,8 +1874,15 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 		// error in acknowledgement,
 		// device could not display the message
-		if (attrs.error) {
-			logger.warn({ attrs }, 'received error in ack')
+		if(attrs.error) {
+			if(attrs.error === SERVER_ERROR_CODES.MissingTcToken) {
+				logTcToken('error_463', { jid: attrs.from, msgId: attrs.id })
+			} else if(attrs.error === SERVER_ERROR_CODES.SmaxInvalid) {
+				logTcToken('error_479', { jid: attrs.from, msgId: attrs.id })
+			} else {
+				logger.warn({ attrs }, 'received error in ack')
+			}
+
 			ev.emit('messages.update', [
 				{
 					key,
@@ -1766,20 +1892,6 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					}
 				}
 			])
-
-			// resend the message with device_fanout=false, use at your own risk
-			// if (attrs.error === '475') {
-			// 	const msg = await getMessage(key)
-			// 	if (msg) {
-			// 		await relayMessage(key.remoteJid!, msg, {
-			// 			messageId: key.id!,
-			// 			useUserDevicesCache: false,
-			// 			additionalAttributes: {
-			// 				device_fanout: 'false'
-			// 			}
-			// 		})
-			// 	}
-			// }
 		}
 	}
 
@@ -1936,9 +2048,30 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	})
 
 	ev.on('connection.update', ({ isOnline }) => {
-		if (typeof isOnline !== 'undefined') {
+		if(typeof isOnline !== 'undefined') {
 			sendActiveReceipts = isOnline
 			logger.trace(`sendActiveReceipts set to "${sendActiveReceipts}"`)
+
+			// Prune expired tctokens when coming online (max once per 24h)
+			if(isOnline) {
+				const now = Date.now()
+				const ONE_DAY_MS = 86400000
+				if(now - lastTcTokenPruneTs > ONE_DAY_MS) {
+					lastTcTokenPruneTs = now
+					// Persist prune timestamp so it survives restarts
+					Promise.resolve(authState.keys.set({
+						tctoken: {
+							[TC_TOKEN_PRUNE_TS_KEY]: {
+								token: Buffer.alloc(0),
+								timestamp: now.toString()
+							}
+						}
+					})).catch(() => { /* non-critical */ })
+					pruneExpiredTcTokens().catch(err => {
+						logger.debug({ err: err?.message }, 'tctoken pruning failed')
+					})
+				}
+			}
 		}
 	})
 

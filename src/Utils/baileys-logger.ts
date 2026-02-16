@@ -947,4 +947,64 @@ export function logLidMapping(
 	}
 }
 
+/**
+ * Log tctoken lifecycle events
+ *
+ * @example
+ * logTcToken('fetch', { jid: '5511999999999@s.whatsapp.net' })
+ * // Output: [BAILEYS] 🔑 TcToken fetch → 5511999999999@s.whatsapp.net
+ *
+ * logTcToken('expired', { jid: '5511999999999@s.whatsapp.net', age: '32d' })
+ * // Output: [BAILEYS] 🔑 TcToken expired → 5511999999999@s.whatsapp.net { age: 32d }
+ */
+export function logTcToken(
+	event: 'stored' | 'expired' | 'fetch' | 'fetched' | 'reissue' | 'reissue_ok' | 'reissue_fail' | 'prune' | 'error_463' | 'error_479' | 'attached',
+	data?: Record<string, unknown>,
+	sessionName?: string
+): void {
+	if (!isBaileysLogEnabled()) return
+
+	const prefix = sessionName ? `[BAILEYS] [${sessionName}]` : '[BAILEYS]'
+	const jid = data?.jid ? ` → ${data.jid}` : ''
+	const rest = data ? { ...data } : undefined
+	if (rest) delete rest.jid
+	const extraStr = rest && Object.keys(rest).length > 0 ? ' ' + formatLogData(rest) : ''
+
+	switch (event) {
+		case 'stored':
+			console.log(`${prefix} 🔑 TcToken stored${jid}${extraStr}`)
+			break
+		case 'expired':
+			console.log(`${prefix} 🔑 TcToken expired${jid}${extraStr}`)
+			break
+		case 'fetch':
+			console.log(`${prefix} 🔑 TcToken fetch${jid}${extraStr}`)
+			break
+		case 'fetched':
+			console.log(`${prefix} 🔑 TcToken fetched${jid}${extraStr}`)
+			break
+		case 'reissue':
+			console.log(`${prefix} 🔑 TcToken reissue${jid}${extraStr}`)
+			break
+		case 'reissue_ok':
+			console.log(`${prefix} 🔑 TcToken reissue OK${jid}${extraStr}`)
+			break
+		case 'reissue_fail':
+			console.log(`${prefix} 🔑 TcToken reissue failed${jid}${extraStr}`)
+			break
+		case 'prune':
+			console.log(`${prefix} 🔑 TcToken prune${extraStr}`)
+			break
+		case 'attached':
+			console.log(`${prefix} 🔑 TcToken attached${jid}${extraStr}`)
+			break
+		case 'error_463':
+			console.log(`${prefix} ⚠️ TcToken missing (463)${jid}${extraStr}`)
+			break
+		case 'error_479':
+			console.log(`${prefix} ⚠️ TcToken smax-invalid (479)${jid}${extraStr}`)
+			break
+	}
+}
+
 export default BaileysLogger
