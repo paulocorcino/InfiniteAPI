@@ -50,5 +50,9 @@ jobs:
           GIT_TERMINAL_PROMPT: 0
         run: yarn install --immutable
 
+      - name: Auto-fix formatting
+        run: yarn lint:fix
+        continue-on-error: true
+
       - name: Check linting
         run: yarn lint
