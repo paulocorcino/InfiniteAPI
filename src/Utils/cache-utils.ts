@@ -469,8 +469,8 @@ export function cached<V>(options: CacheOptions<V> & { keyGenerator?: (...args: 
  * Wrapper for function with cache
  */
 
-// eslint-disable-next-line prettier/prettier
-export function withCache<T extends(...args: unknown[]) => unknown>(
+// eslint-disable-next-line space-before-function-paren
+export function withCache<T extends (...args: unknown[]) => unknown>(
 	fn: T,
 	options: CacheOptions<ReturnType<T>> & { keyGenerator?: (...args: Parameters<T>) => string } = {}
 ): T {
