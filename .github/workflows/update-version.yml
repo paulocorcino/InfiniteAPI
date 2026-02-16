@@ -206,10 +206,13 @@ jobs:
         run: |
           PR_NUMBER="${{ steps.create_pr.outputs.pr_number }}"
           echo "🔀 Merging PR #$PR_NUMBER via squash..."
+          # Brief wait for GitHub to compute PR mergeability
+          sleep 5
           gh pr merge "$PR_NUMBER" \
             --repo "${{ github.repository }}" \
             --squash \
-            --delete-branch
+            --delete-branch \
+            --yes
           echo "✅ PR #$PR_NUMBER merged successfully"
 
       - name: Summary
