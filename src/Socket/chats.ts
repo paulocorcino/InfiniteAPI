@@ -431,6 +431,42 @@ export const makeChatsSocket = (config: SocketConfig) => {
 	}
 
 	const updateBlockStatus = async (jid: string, action: 'block' | 'unblock') => {
+		let lid: string
+		let pn_jid: string | undefined
+
+		if (isLidUser(jid)) {
+			lid = jid
+			if (action === 'block') {
+				const pn = await signalRepository.lidMapping.getPNForLID(jid)
+				if (!pn) {
+					throw new Boom(`Unable to resolve PN JID for LID: ${jid}`)
+				}
+
+				pn_jid = jidNormalizedUser(pn)
+			}
+		} else if (isPnUser(jid)) {
+			const mapped = await signalRepository.lidMapping.getLIDForPN(jid)
+			if (!mapped) {
+				throw new Boom(`Unable to resolve LID for PN JID: ${jid}`)
+			}
+
+			lid = mapped
+			if (action === 'block') {
+				pn_jid = jidNormalizedUser(jid)
+			}
+		} else {
+			throw new Boom(`Invalid jid for block/unblock: ${jid}`)
+		}
+
+		const itemAttrs: { action: 'block' | 'unblock'; jid: string; pn_jid?: string } = {
+			action,
+			jid: lid
+		}
+
+		if (action === 'block' && pn_jid) {
+			itemAttrs.pn_jid = pn_jid
+		}
+
 		await query({
 			tag: 'iq',
 			attrs: {
@@ -441,10 +477,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			content: [
 				{
 					tag: 'item',
-					attrs: {
-						action,
-						jid
-					}
+					attrs: itemAttrs
 				}
 			]
 		})
