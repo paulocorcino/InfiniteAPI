@@ -1519,7 +1519,31 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						result: fetchResult,
 						fallbackJid: destinationJid,
 						keys: authState.keys,
-						getLIDForPN: signalRepository.lidMapping.getLIDForPN.bind(signalRepository.lidMapping)
+						getLIDForPN: signalRepository.lidMapping.getLIDForPN.bind(signalRepository.lidMapping),
+						onNewJidStored: (storedJid) => {
+							// Fire-and-forget: persist JID into tctoken index for pruning
+							(async () => {
+								try {
+									const TC_IDX = '__index'
+									const idxData = await authState.keys.get('tctoken', [TC_IDX])
+									const idxEntry = idxData[TC_IDX]
+									const existing: string[] = idxEntry?.token
+										? JSON.parse(Buffer.from(idxEntry.token).toString('utf8'))
+										: []
+									if(!existing.includes(storedJid)) {
+										existing.push(storedJid)
+										await authState.keys.set({
+											tctoken: {
+												[TC_IDX]: {
+													token: Buffer.from(JSON.stringify(existing), 'utf8'),
+													timestamp: unixTimestampSeconds().toString()
+												}
+											}
+										})
+									}
+								} catch { /* non-critical — index rebuilt on next pruning cycle */ }
+							})()
+						}
 					})
 
 					// Re-read from key store — the notification handler or inline

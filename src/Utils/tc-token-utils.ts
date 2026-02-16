@@ -19,7 +19,7 @@ const TC_TOKEN_NUM_BUCKETS = 4
  */
 export function isTcTokenExpired(timestamp: number | string | null | undefined): boolean {
 	if(timestamp === null || timestamp === undefined) return true
-	const ts = typeof timestamp === 'string' ? parseInt(timestamp) : timestamp
+	const ts = typeof timestamp === 'string' ? Number(timestamp) : timestamp
 	if(isNaN(ts)) return true
 	const now = Math.floor(Date.now() / 1000)
 	const currentBucket = Math.floor(now / TC_TOKEN_BUCKET_DURATION)
@@ -57,9 +57,10 @@ export async function resolveTcTokenJid(
 	jid: string,
 	getLIDForPN: (pn: string) => Promise<string | null>
 ): Promise<string> {
-	if(isLidUser(jid)) return jid
-	const lid = await getLIDForPN(jid)
-	return lid ?? jid
+	const normalized = jidNormalizedUser(jid)
+	if(isLidUser(normalized)) return normalized
+	const lid = await getLIDForPN(normalized)
+	return lid ?? normalized
 }
 
 type TcTokenParams = {

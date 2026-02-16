@@ -153,20 +153,26 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 	// ======= tctoken index tracking for cross-session pruning =======
 	const TC_TOKEN_INDEX_KEY = '__index'
+	const TC_TOKEN_PRUNE_TS_KEY = '__prune_ts'
 	const tcTokenKnownJids = new Set<string>()
 	let tcTokenIndexSaveTimer: ReturnType<typeof setTimeout> | undefined
 	let lastTcTokenPruneTs = 0
 
-	// Load persisted JID index on startup
+	// Load persisted JID index and last prune timestamp on startup
 	const tcTokenIndexLoaded = (async () => {
 		try {
-			const data = await authState.keys.get('tctoken', [TC_TOKEN_INDEX_KEY])
+			const data = await authState.keys.get('tctoken', [TC_TOKEN_INDEX_KEY, TC_TOKEN_PRUNE_TS_KEY])
 			const entry = data[TC_TOKEN_INDEX_KEY]
 			if(entry?.token) {
 				const stored = JSON.parse(Buffer.from(entry.token).toString('utf8'))
 				if(Array.isArray(stored)) {
 					for(const jid of stored) tcTokenKnownJids.add(jid)
 				}
+			}
+
+			const pruneEntry = data[TC_TOKEN_PRUNE_TS_KEY]
+			if(pruneEntry?.timestamp) {
+				lastTcTokenPruneTs = Number(pruneEntry.timestamp)
 			}
 		} catch { /* first run or corrupt index — start fresh */ }
 	})()
@@ -197,19 +203,21 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		const pruneSet: Record<string, null> = {}
 		const survivingJids: string[] = []
 
-		for(const jid of tcTokenKnownJids) {
-			if(jid === TC_TOKEN_INDEX_KEY) continue
-			try {
-				const data = await authState.keys.get('tctoken', [jid])
-				const entry = data[jid]
+		const jidsToCheck = Array.from(tcTokenKnownJids).filter(j => j !== TC_TOKEN_INDEX_KEY)
+		if(!jidsToCheck.length) return
+
+		try {
+			const allData = await authState.keys.get('tctoken', jidsToCheck)
+			for(const jid of jidsToCheck) {
+				const entry = allData[jid]
 				if(!entry?.token || isTcTokenExpired(entry.timestamp)) {
 					pruneSet[jid] = null
 				} else {
 					survivingJids.push(jid)
 				}
-			} catch {
-				pruneSet[jid] = null
 			}
+		} catch {
+			return // batch read failed — skip this pruning cycle
 		}
 
 		const pruneCount = Object.keys(pruneSet).length
@@ -2050,6 +2058,15 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				const ONE_DAY_MS = 86400000
 				if(now - lastTcTokenPruneTs > ONE_DAY_MS) {
 					lastTcTokenPruneTs = now
+					// Persist prune timestamp so it survives restarts
+					Promise.resolve(authState.keys.set({
+						tctoken: {
+							[TC_TOKEN_PRUNE_TS_KEY]: {
+								token: Buffer.alloc(0),
+								timestamp: now.toString()
+							}
+						}
+					})).catch(() => { /* non-critical */ })
 					pruneExpiredTcTokens().catch(err => {
 						logger.debug({ err: err?.message }, 'tctoken pruning failed')
 					})
