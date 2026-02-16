@@ -50,8 +50,8 @@ import {
 	type BinaryNode,
 	getBinaryNodeChild,
 	getBinaryNodeChildren,
-	isLidUser,
-	isPnUser,
+	isAnyLidUser,
+	isAnyPnUser,
 	jidDecode,
 	jidNormalizedUser,
 	reduceBinaryNodeToDictionary,
@@ -431,31 +431,32 @@ export const makeChatsSocket = (config: SocketConfig) => {
 	}
 
 	const updateBlockStatus = async (jid: string, action: 'block' | 'unblock') => {
+		const normalizedJid = jidNormalizedUser(jid)
 		let lid: string
 		let pn_jid: string | undefined
 
-		if (isLidUser(jid)) {
-			lid = jid
+		if (isAnyLidUser(normalizedJid)) {
+			lid = normalizedJid
 			if (action === 'block') {
-				const pn = await signalRepository.lidMapping.getPNForLID(jid)
+				const pn = await signalRepository.lidMapping.getPNForLID(normalizedJid)
 				if (!pn) {
-					throw new Boom(`Unable to resolve PN JID for LID: ${jid}`)
+					throw new Boom(`Unable to resolve PN JID for LID: ${jid}`, { statusCode: 400 })
 				}
 
 				pn_jid = jidNormalizedUser(pn)
 			}
-		} else if (isPnUser(jid)) {
-			const mapped = await signalRepository.lidMapping.getLIDForPN(jid)
+		} else if (isAnyPnUser(normalizedJid)) {
+			const mapped = await signalRepository.lidMapping.getLIDForPN(normalizedJid)
 			if (!mapped) {
-				throw new Boom(`Unable to resolve LID for PN JID: ${jid}`)
+				throw new Boom(`Unable to resolve LID for PN JID: ${jid}`, { statusCode: 400 })
 			}
 
 			lid = mapped
 			if (action === 'block') {
-				pn_jid = jidNormalizedUser(jid)
+				pn_jid = normalizedJid
 			}
 		} else {
-			throw new Boom(`Invalid jid for block/unblock: ${jid}`)
+			throw new Boom(`Invalid jid for block/unblock: ${jid}`, { statusCode: 400 })
 		}
 
 		const itemAttrs: { action: 'block' | 'unblock'; jid: string; pn_jid?: string } = {
@@ -734,7 +735,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		// and never for own profile pic (Chat model for self has no tcToken).
 		// Including tctoken for own JID causes the server to never respond.
 		const normalizedJid = jidNormalizedUser(jid)
-		const isUserJid = isPnUser(normalizedJid) || isLidUser(normalizedJid)
+		const isUserJid = isAnyPnUser(normalizedJid) || isAnyLidUser(normalizedJid)
 		const me = authState.creds.me
 		const isSelf =
 			me && (normalizedJid === jidNormalizedUser(me.id) || (me.lid && normalizedJid === jidNormalizedUser(me.lid)))
