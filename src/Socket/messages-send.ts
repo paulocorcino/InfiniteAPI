@@ -1869,7 +1869,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 			// Emit own event for album root if configured
 			if (config.emitOwnEvents) {
-				void process.nextTick(async () => {
+				process.nextTick(async () => {
 					let mutexKey = albumRootMsg.key.remoteJid
 					if (!mutexKey) {
 						logger.warn(
@@ -1975,7 +1975,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 						// Emit own event if configured
 						if (config.emitOwnEvents) {
-							void process.nextTick(async () => {
+							process.nextTick(async () => {
 								let mutexKey = mediaMsg.key.remoteJid
 								if (!mutexKey) {
 									logger.warn({ msgId: mediaMsg.key.id }, 'Missing remoteJid in mediaMsg, using msg.key.id as fallback')
@@ -2139,7 +2139,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				}) as WAMessage
 
 				if (config.emitOwnEvents) {
-					void process.nextTick(async () => {
+					process.nextTick(async () => {
 						const mutexKey = fullMsg.key.remoteJid || fullMsg.key.id || 'unknown'
 						await messageMutex.mutex(mutexKey, () => upsertMessage(fullMsg, 'append'))
 					})
@@ -2228,7 +2228,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					additionalNodes
 				})
 				if (config.emitOwnEvents) {
-					void process.nextTick(async () => {
+					process.nextTick(async () => {
 						let mutexKey = fullMsg.key.remoteJid
 						if (!mutexKey) {
 							logger.warn({ msgId: fullMsg.key.id }, 'Missing remoteJid in fullMsg, using msg.key.id as fallback')
