@@ -199,14 +199,18 @@ jobs:
             fi
           fi
 
-      - name: Enable Auto-merge
-        id: enable_automerge
+      - name: Auto-merge PR
         if: steps.create_pr.outputs.pr_number != ''
-        uses: peter-evans/enable-pull-request-automerge@v3
-        with:
-          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
-          pull-request-number: ${{ steps.create_pr.outputs.pr_number }}
-          merge-method: squash
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ steps.create_pr.outputs.pr_number }}"
+          echo "🔀 Merging PR #$PR_NUMBER via squash..."
+          gh pr merge "$PR_NUMBER" \
+            --repo "${{ github.repository }}" \
+            --squash \
+            --delete-branch
+          echo "✅ PR #$PR_NUMBER merged successfully"
 
       - name: Summary
         run: |
