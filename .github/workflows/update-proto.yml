@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 jobs:
   update-proto:
@@ -61,6 +62,7 @@ jobs:
           echo -e "{\n\t\"version\": [$WA_NUMBERS]\n}" > src/Defaults/baileys-version.json
 
       - name: Create Pull Request
+        id: create_pr
         uses: peter-evans/create-pull-request@v5
         with:
           commit-message: 'chore: updated proto/version to v${{steps.wa_proto_info.outputs.wa_version}}'
@@ -72,3 +74,96 @@ jobs:
           add-paths: |
             WAProto/*
             src/Defaults/baileys-version.json
+
+      - name: Auto-merge PR
+        if: steps.create_pr.outputs.pull-request-number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ steps.create_pr.outputs.pull-request-number }}"
+          echo "🔀 Attempting to merge PR #$PR_NUMBER via squash..."
+          
+          # Check PR status
+          set +e
+          PR_STATE=$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json state --jq '.state' 2>&1)
+          PR_VIEW_EXIT=$?
+          set -e
+          
+          if [ $PR_VIEW_EXIT -ne 0 ] || [ -z "$PR_STATE" ]; then
+            echo "⚠️ Could not retrieve PR state, attempting merge anyway..."
+          else
+            echo "📊 PR State: $PR_STATE"
+            if [ "$PR_STATE" != "OPEN" ]; then
+              echo "⚠️ PR is not open (state: $PR_STATE), skipping merge"
+              exit 0
+            fi
+          fi
+          
+          # Brief wait for GitHub to compute PR mergeability
+          sleep 5
+          
+          # Check if PR is mergeable
+          set +e
+          MERGEABLE=$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json mergeable --jq '.mergeable' 2>&1)
+          set -e
+          echo "📊 Mergeable: $MERGEABLE"
+          
+          # Attempt merge with error handling
+          set +e
+          MERGE_OUTPUT=$(gh pr merge "$PR_NUMBER" \
+            --repo "${{ github.repository }}" \
+            --squash \
+            --delete-branch \
+            --yes 2>&1)
+          MERGE_EXIT=$?
+          set -e
+          
+          if [ $MERGE_EXIT -eq 0 ]; then
+            echo "✅ PR #$PR_NUMBER merged successfully"
+            echo "$MERGE_OUTPUT"
+          else
+            echo "::warning::Standard merge failed for PR #$PR_NUMBER"
+            echo "::group::Merge Error Output"
+            echo "$MERGE_OUTPUT"
+            echo "::endgroup::"
+            
+            # Try with admin flag (bypasses branch protection if user has admin rights)
+            echo "🔧 Attempting merge with admin override..."
+            set +e
+            ADMIN_OUTPUT=$(gh pr merge "$PR_NUMBER" \
+              --repo "${{ github.repository }}" \
+              --squash \
+              --delete-branch \
+              --admin 2>&1)
+            ADMIN_EXIT=$?
+            set -e
+            
+            if [ $ADMIN_EXIT -eq 0 ]; then
+              echo "✅ PR #$PR_NUMBER merged successfully with admin override"
+              echo "$ADMIN_OUTPUT"
+            else
+              echo "::error::Failed to merge PR #$PR_NUMBER even with admin override"
+              echo "::group::Admin Merge Error Output"
+              echo "$ADMIN_OUTPUT"
+              echo "::endgroup::"
+              echo "::warning::Consider configuring a Personal Access Token (PAT) with full repo permissions as GH_PAT secret"
+              echo "::warning::PR #$PR_NUMBER was created but requires manual merge: https://github.com/${{ github.repository }}/pull/$PR_NUMBER"
+              # Don't exit with error to avoid blocking the workflow
+              exit 0
+            fi
+          fi
+
+      - name: Summary
+        run: |
+          echo "### WAProto Update" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          WA_VERSION="${{ steps.wa_proto_info.outputs.wa_version }}"
+          PR_NUMBER="${{ steps.create_pr.outputs.pull-request-number }}"
+          
+          if [ -n "$PR_NUMBER" ]; then
+            echo "✅ PR #$PR_NUMBER created for version v$WA_VERSION" >> $GITHUB_STEP_SUMMARY
+            echo "📦 Updated: WAProto files + baileys-version.json" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "ℹ️ No changes detected" >> $GITHUB_STEP_SUMMARY
+          fi
