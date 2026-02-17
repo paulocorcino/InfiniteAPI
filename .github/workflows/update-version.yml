@@ -2,8 +2,8 @@ name: Update WhatsApp Version
 
 on:
   schedule:
-    # Run daily at 06:00 UTC (when WhatsApp typically deploys updates)
-    - cron: '0 6 * * *'
+    # Run daily at 09:00 UTC (optimized timing after WhatsApp deploys)
+    - cron: '0 9 * * *'
   workflow_dispatch:
     inputs:
       force:
@@ -146,7 +146,7 @@ jobs:
           **Single source of truth:**
           - \`src/Defaults/baileys-version.json\` (other files import from here)
 
-          **Update frequency:** Daily at 06:00 UTC"
+          **Update frequency:** Daily at 09:00 UTC"
 
           if [ "$FORCE" == "true" ]; then
             PR_BODY="$PR_BODY
