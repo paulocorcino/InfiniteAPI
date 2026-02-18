@@ -5,6 +5,9 @@ on:
     - cron: '0 3 * * *'
   workflow_dispatch:
 
+# Dynamic run name with run number
+run-name: "Update WAProto #${{ github.run_number }}"
+
 permissions:
   contents: write
   pull-requests: write
@@ -51,6 +54,10 @@ jobs:
           WA_JS_URL=$(cat wa-logs.txt | perl -n -e'/Found source JS URL\: (.+)/ && print $1')
           echo "wa_version=$WA_VERSION" >> $GITHUB_OUTPUT
           echo "wa_js_url=$WA_JS_URL" >> $GITHUB_OUTPUT
+          
+          # Display version prominently
+          echo "📱 WhatsApp Proto Version: v$WA_VERSION"
+          echo "🔗 Source JS URL: $WA_JS_URL"
 
       - name: GenerateStatics
         run: yarn gen:protobuf
@@ -60,17 +67,33 @@ jobs:
           WA_VERSION="${{steps.wa_proto_info.outputs.wa_version}}"
           WA_NUMBERS=$(echo $WA_VERSION | sed "s/\./, /g")
           echo -e "{\n\t\"version\": [$WA_NUMBERS]\n}" > src/Defaults/baileys-version.json
+          
+          # Confirm update
+          echo "✅ Updated baileys-version.json to v$WA_VERSION"
+          cat src/Defaults/baileys-version.json
 
       - name: Create Pull Request
         id: create_pr
         uses: peter-evans/create-pull-request@v5
         with:
-          commit-message: 'chore: updated proto/version to v${{steps.wa_proto_info.outputs.wa_version}}'
-          title: 'Whatsapp v${{steps.wa_proto_info.outputs.wa_version}} proto/version change'
+          commit-message: 'chore: update proto/version to v${{steps.wa_proto_info.outputs.wa_version}}'
+          title: 'chore: update WhatsApp proto to v${{steps.wa_proto_info.outputs.wa_version}}'
           branch: 'update-proto/stable'
           delete-branch: true
           labels: 'update-proto'
-          body: "Automated changes\nFound source JS URL: ${{steps.wa_proto_info.outputs.wa_js_url}}\nCurrent version: v${{steps.wa_proto_info.outputs.wa_version}}"
+          body: |
+            ## 📦 Automated WhatsApp Proto Update
+            
+            **Version:** `v${{steps.wa_proto_info.outputs.wa_version}}`
+            
+            **Source JS URL:** ${{steps.wa_proto_info.outputs.wa_js_url}}
+            
+            ### Changes
+            - ✅ Updated `WAProto/*` (protobuf definitions)
+            - ✅ Updated `src/Defaults/baileys-version.json`
+            
+            ### Update Frequency
+            Daily at 03:00 UTC (00:00 BRT)
           add-paths: |
             WAProto/*
             src/Defaults/baileys-version.json
@@ -81,7 +104,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
         run: |
           PR_NUMBER="${{ steps.create_pr.outputs.pull-request-number }}"
-          echo "🔀 Attempting to merge PR #$PR_NUMBER via squash..."
+          WA_VERSION="${{ steps.wa_proto_info.outputs.wa_version }}"
+          
+          echo "🔀 Attempting to merge PR #$PR_NUMBER (v$WA_VERSION) via squash..."
           
           # Check PR status
           set +e
@@ -119,10 +144,10 @@ jobs:
           set -e
           
           if [ $MERGE_EXIT -eq 0 ]; then
-            echo "✅ PR #$PR_NUMBER merged successfully"
+            echo "✅ PR #$PR_NUMBER (v$WA_VERSION) merged successfully"
             echo "$MERGE_OUTPUT"
           else
-            echo "::warning::Standard merge failed for PR #$PR_NUMBER"
+            echo "::warning::Standard merge failed for PR #$PR_NUMBER (v$WA_VERSION)"
             echo "::group::Merge Error Output"
             echo "$MERGE_OUTPUT"
             echo "::endgroup::"
@@ -139,10 +164,10 @@ jobs:
             set -e
             
             if [ $ADMIN_EXIT -eq 0 ]; then
-              echo "✅ PR #$PR_NUMBER merged successfully with admin override"
+              echo "✅ PR #$PR_NUMBER (v$WA_VERSION) merged successfully with admin override"
               echo "$ADMIN_OUTPUT"
             else
-              echo "::error::Failed to merge PR #$PR_NUMBER even with admin override"
+              echo "::error::Failed to merge PR #$PR_NUMBER (v$WA_VERSION) even with admin override"
               echo "::group::Admin Merge Error Output"
               echo "$ADMIN_OUTPUT"
               echo "::endgroup::"
@@ -155,15 +180,24 @@ jobs:
 
       - name: Summary
         run: |
-          echo "### WAProto Update" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 WAProto Update" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
           WA_VERSION="${{ steps.wa_proto_info.outputs.wa_version }}"
+          WA_JS_URL="${{ steps.wa_proto_info.outputs.wa_js_url }}"
           PR_NUMBER="${{ steps.create_pr.outputs.pull-request-number }}"
           
+          echo "**Version:** \`v$WA_VERSION\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
           if [ -n "$PR_NUMBER" ]; then
-            echo "✅ PR #$PR_NUMBER created for version v$WA_VERSION" >> $GITHUB_STEP_SUMMARY
-            echo "📦 Updated: WAProto files + baileys-version.json" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **PR #$PR_NUMBER created and merged successfully**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Changes:**" >> $GITHUB_STEP_SUMMARY
+            echo "- 📦 Updated WAProto/* (protobuf definitions)" >> $GITHUB_STEP_SUMMARY
+            echo "- 📝 Updated baileys-version.json" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Source:** [$WA_JS_URL]($WA_JS_URL)" >> $GITHUB_STEP_SUMMARY
           else
-            echo "ℹ️ No changes detected" >> $GITHUB_STEP_SUMMARY
+            echo "ℹ️ No changes detected - already up to date" >> $GITHUB_STEP_SUMMARY
           fi
