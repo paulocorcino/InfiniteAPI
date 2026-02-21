@@ -148,6 +148,12 @@ export async function storeTcTokensFromIqResult({
 			continue
 		}
 
+		// Don't store timestamp-less tokens at all — isTcTokenExpired treats them
+		// as immediately expired regardless of whether an existing entry is present
+		if(!incomingTs) {
+			continue
+		}
+
 		await keys.set({
 			tctoken: {
 				[storageJid]: {

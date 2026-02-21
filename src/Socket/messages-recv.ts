@@ -1085,6 +1085,12 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					continue
 				}
 
+				// Don't store timestamp-less tokens — they expire immediately and would
+				// corrupt a valid existing entry if one is already present
+				if(!incomingTs) {
+					continue
+				}
+
 				await authState.keys.set({
 					tctoken: {
 						[storageJid]: {
@@ -1878,22 +1884,25 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		if(attrs.error) {
 			if(attrs.error === SERVER_ERROR_CODES.MissingTcToken) {
 				const msgId = attrs.id
-				const jid = attrs.from
+				const jid = jidNormalizedUser(attrs.from)
 				logTcToken('error_463', { jid, msgId })
 
 				// Single-retry: wait 1.5s for the server's tctoken notification to arrive,
 				// then resend. A Set prevents infinite retry loops.
-				if(msgId && jid && !tcTokenRetriedMsgIds.has(msgId)) {
-					tcTokenRetriedMsgIds.add(msgId)
-					// Safety cap — prevent unbounded memory growth
-					if(tcTokenRetriedMsgIds.size > 500) {
-						tcTokenRetriedMsgIds.clear()
-					}
+				// Composite key (jid:msgId) ensures retries are isolated per destination.
+				const retryKey = `${jid}:${msgId}`
+				if(msgId && jid && !tcTokenRetriedMsgIds.has(retryKey)) {
+					tcTokenRetriedMsgIds.add(retryKey)
+					// Each entry auto-expires after 60s — naturally bounded under normal use
+					setTimeout(() => tcTokenRetriedMsgIds.delete(retryKey), 60_000)
 
 					;(async () => {
 						try {
 							await delay(1500)
-							const msg = await getMessage(key)
+							const msg =
+								(await getMessage(key)) ??
+								// Fallback: ack can arrive <30ms after send, before store persists
+								messageRetryManager?.getRecentMessage(jid, msgId)?.message
 							if(msg) {
 								await relayMessage(jid, msg, { messageId: msgId, useUserDevicesCache: true })
 								logTcToken('retry_463_ok', { jid, msgId })
@@ -2078,7 +2087,25 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		}
 	})
 
-	ev.on('connection.update', ({ isOnline }) => {
+	ev.on('connection.update', ({ isOnline, connection }) => {
+		// Flush pending tctoken index save on disconnect to avoid writing after close
+		if(connection === 'close' && tcTokenIndexSaveTimer) {
+			clearTimeout(tcTokenIndexSaveTimer)
+			tcTokenIndexSaveTimer = undefined
+			// Await index load first — prevents overwriting a more complete persisted index
+			// if the connection closes before the initial load finishes.
+			tcTokenIndexLoaded.then(() => {
+				Promise.resolve(authState.keys.set({
+					tctoken: {
+						[TC_TOKEN_INDEX_KEY]: {
+							token: Buffer.from(JSON.stringify([...tcTokenKnownJids]), 'utf8'),
+							timestamp: unixTimestampSeconds().toString()
+						}
+					}
+				})).catch(() => { /* non-critical */ })
+			}).catch(() => { /* non-critical */ })
+		}
+
 		if(typeof isOnline !== 'undefined') {
 			sendActiveReceipts = isOnline
 			logger.trace(`sendActiveReceipts set to "${sendActiveReceipts}"`)

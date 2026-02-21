@@ -1521,31 +1521,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							result: fetchResult,
 							fallbackJid: destinationJid,
 							keys: authState.keys,
-							getLIDForPN: signalRepository.lidMapping.getLIDForPN.bind(signalRepository.lidMapping),
-							onNewJidStored: (storedJid) => {
-								// Fire-and-forget: persist JID into tctoken index for pruning
-								(async () => {
-									try {
-										const TC_IDX = '__index'
-										const idxData = await authState.keys.get('tctoken', [TC_IDX])
-										const idxEntry = idxData[TC_IDX]
-										const existing: string[] = idxEntry?.token
-											? JSON.parse(Buffer.from(idxEntry.token).toString('utf8'))
-											: []
-										if(!existing.includes(storedJid)) {
-											existing.push(storedJid)
-											await authState.keys.set({
-												tctoken: {
-													[TC_IDX]: {
-														token: Buffer.from(JSON.stringify(existing), 'utf8'),
-														timestamp: unixTimestampSeconds().toString()
-													}
-												}
-											})
-										}
-								} catch { /* non-critical — index rebuilt on next pruning cycle */ }
-								})()
-							}
+							getLIDForPN: signalRepository.lidMapping.getLIDForPN.bind(signalRepository.lidMapping)
+							// onNewJidStored not passed — the pruning index lives in messages-recv (higher layer)
 						})
 					})
 					.catch(err => {
@@ -1654,7 +1631,15 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				// This ensures failed issuance allows re-issuance on the next message
 				// rather than blocking it for up to 7 days (one bucket duration).
 				getPrivacyTokens([destinationJid], issueTimestamp)
-					.then(async () => {
+					.then(async result => {
+						// Store any tokens received in the IQ response
+						await storeTcTokensFromIqResult({
+							result,
+							fallbackJid: tcTokenJid,
+							keys: authState.keys,
+							getLIDForPN: signalRepository.lidMapping.getLIDForPN.bind(signalRepository.lidMapping)
+						})
+
 						// Re-read entry to avoid overwriting concurrent notification handler updates
 						const currentData = await authState.keys.get('tctoken', [tcTokenJid])
 						const currentEntry = currentData[tcTokenJid]
@@ -1701,7 +1686,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 			// Add message to retry cache if enabled
 			if (messageRetryManager && !participant) {
-				messageRetryManager.addRecentMessage(destinationJid, msgId, message)
+				messageRetryManager.addRecentMessage(jidNormalizedUser(destinationJid), msgId, message)
 			}
 
 			// Track session activity for cleanup (all target JIDs)
