@@ -37,10 +37,11 @@ import {
 	decodePatches,
 	decodeSyncdSnapshot,
 	encodeSyncdPatch,
+	ensureLTHashStateVersion,
 	extractSyncdPatches,
 	generateProfilePicture,
 	getHistoryMsg,
-	ensureLTHashStateVersion,
+	isAppStateSyncIrrecoverable,
 	newLTHashState,
 	processSyncAction
 } from '../Utils'
@@ -60,7 +61,6 @@ import {
 } from '../WABinary'
 import { USyncQuery, USyncUser } from '../WAUSync'
 import { makeSocket } from './socket.js'
-const MAX_SYNC_ATTEMPTS = 2
 
 export const makeChatsSocket = (config: SocketConfig) => {
 	const {
@@ -579,6 +579,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			// otherwise when we resync from scratch -- all notifications will fire
 			const initialVersionMap: { [T in WAPatchName]?: number } = {}
 			const globalMutationMap: ChatMutationMap = {}
+			const forceSnapshotCollections = new Set<WAPatchName>()
 
 			await authState.keys.transaction(async () => {
 				const collectionsToHandle = new Set<string>(collections)
@@ -606,15 +607,20 @@ export const makeChatsSocket = (config: SocketConfig) => {
 
 						states[name] = state
 
-						logger.info(`resyncing ${name} from v${state.version}`)
+						const shouldForceSnapshot = forceSnapshotCollections.has(name)
+						if (shouldForceSnapshot) {
+							forceSnapshotCollections.delete(name)
+						}
+
+						logger.info(`resyncing ${name} from v${state.version}${shouldForceSnapshot ? ' (forcing snapshot)' : ''}`)
 
 						nodes.push({
 							tag: 'collection',
 							attrs: {
 								name,
 								version: state.version.toString(),
-								// return snapshot if being synced from scratch
-								return_snapshot: (!state.version).toString()
+								// return snapshot if syncing from scratch or forcing after a failed attempt
+								return_snapshot: (shouldForceSnapshot || !state.version).toString()
 							}
 						})
 					}
@@ -685,31 +691,29 @@ export const makeChatsSocket = (config: SocketConfig) => {
 								collectionsToHandle.delete(name)
 							}
 						} catch (error: any) {
-							// if retry attempts overshoot
-							// or key not found
-							const isKeyNotFound = error.output?.statusCode === 404
-							const isIrrecoverableError =
-								(attemptsMap[name] || 0) >= MAX_SYNC_ATTEMPTS || isKeyNotFound || error.name === 'TypeError'
-							if (isKeyNotFound) {
-								const currentVersion = states[name]?.version ?? 0
-								logger.info(
-									{ name },
-									`app state sync: decryption key not available for "${name}" (syncing from v${currentVersion}) -- expected for new sessions where old keys are not shared by the server`
-								)
-							} else {
-								logger.info(
-									{ name, error: error.stack },
-									`failed to sync state from version${isIrrecoverableError ? '' : ', removing and trying from scratch'}`
-								)
-							}
-
-							await authState.keys.set({ 'app-state-sync-version': { [name]: null } })
-							// increment number of retries
 							attemptsMap[name] = (attemptsMap[name] || 0) + 1
 
-							if (isIrrecoverableError) {
-								// stop retrying
+							const irrecoverable = isAppStateSyncIrrecoverable(error, attemptsMap[name])
+							const logData = {
+								name,
+								attempt: attemptsMap[name],
+								version: states[name].version,
+								statusCode: error.output?.statusCode,
+								errorType: error.name,
+								error: error.stack
+							}
+
+							if (irrecoverable) {
+								logger.warn(logData, `failed to sync ${name} from v${states[name].version}, giving up`)
+								// reset persisted version to null so the next resyncAppState call
+								// requests a full snapshot instead of reusing the stale version that caused the error
+								await authState.keys.set({ 'app-state-sync-version': { [name]: null } })
 								collectionsToHandle.delete(name)
+							} else {
+								logger.info(logData, `failed to sync ${name} from v${states[name].version}, forcing snapshot retry`)
+								// force a full snapshot on retry to recover from
+								// corrupted local state (e.g. LTHash MAC mismatch)
+								forceSnapshotCollections.add(name)
 							}
 						}
 					}
