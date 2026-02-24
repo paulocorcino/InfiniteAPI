@@ -355,37 +355,48 @@ export const getStatusFromReceiptType = (type: string | undefined) => {
 	return status
 }
 
+/** Maps child node tag to a DisconnectReason (child-level code parsing). */
 const CODE_MAP: { [_: string]: DisconnectReason } = {
-	conflict: DisconnectReason.connectionReplaced
+	// conflict is handled explicitly below to distinguish type=replaced vs others
 }
 
 /**
- * Stream errors generally provide a reason, map that to a baileys DisconnectReason
- * @param reason the string reason given, eg. "conflict"
+ * Parse stream:error node and map to a DisconnectReason.
+ * Matches WA Web's WAWebHandleStreamError parser.
+ *
+ * Resolution order:
+ * 1. conflict child → type attribute determines connectionReplaced vs loggedOut
+ * 2. parent code attribute (515 restartRequired, 516 sessionInvalidated, other numeric)
+ * 3. CODE_MAP lookup from child tag (child-level code parsing)
+ * 4. DisconnectReason.badSession fallback
  */
 export const getErrorCodeFromStreamError = (node: BinaryNode) => {
 	const [reasonNode] = getAllBinaryNodeChildren(node)
 	let reason = reasonNode?.tag || 'unknown'
 
-	// device_removed is a specific conflict type that means full logout
-	if(reason === 'conflict' && reasonNode?.attrs?.type === 'device_removed') {
+	// Conflict child: type attribute determines connectionReplaced vs loggedOut.
+	// WA Web default: any type other than 'replaced' is treated as device_removed (loggedOut).
+	if(reason === 'conflict') {
+		const conflictType = reasonNode!.attrs?.type
+		if(conflictType === 'replaced') {
+			return { reason: 'replaced', statusCode: DisconnectReason.connectionReplaced }
+		}
+
 		return { reason: 'device_removed', statusCode: DisconnectReason.loggedOut }
 	}
 
-	const statusCode = +(reasonNode?.attrs?.code || node.attrs.code || CODE_MAP[reason] || DisconnectReason.badSession)
+	// Child-level code parsing: parent code attr > child code attr > CODE_MAP from child tag > badSession
+	const statusCode = +(node.attrs.code || reasonNode?.attrs?.code || CODE_MAP[reason] || DisconnectReason.badSession)
 
 	if(statusCode === DisconnectReason.restartRequired) {
 		reason = 'restart required'
-	}
-
-	if(statusCode === DisconnectReason.sessionInvalidated) {
+	} else if(statusCode === DisconnectReason.sessionInvalidated) {
 		reason = 'session invalidated'
+	} else if(node.attrs.code) {
+		reason = `code ${statusCode}`
 	}
 
-	return {
-		reason,
-		statusCode
-	}
+	return { reason, statusCode }
 }
 
 export const getCallStatusFromNode = ({ tag, attrs }: BinaryNode) => {
