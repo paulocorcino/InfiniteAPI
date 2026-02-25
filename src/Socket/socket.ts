@@ -1110,6 +1110,17 @@ export const makeSocket = (config: SocketConfig) => {
 		clearInterval(keepAliveReq)
 		clearTimeout(qrTimer)
 
+		// Clear offline-buffer safety timer so its callback cannot call ev.flush()
+		// on an already-closed socket (e.g. auth failure or early network drop before
+		// CB:ib,,offline ever arrives).  Mirrors how awaitingSyncTimeout is cleared in
+		// chats.ts on connection close.
+		if (offlineBufferTimeout) {
+			clearTimeout(offlineBufferTimeout)
+			offlineBufferTimeout = undefined
+		}
+
+		didStartBuffer = false
+
 		// Stop session cleanup scheduler
 		sessionCleanup.stop()
 
@@ -1572,12 +1583,38 @@ export const makeSocket = (config: SocketConfig) => {
 	})
 
 	let didStartBuffer = false
+	// perf(inbound-latency): safety timer that caps how long the offline-phase buffer may
+	// block live message delivery. The server sends CB:ib,,offline only after transmitting
+	// ALL queued offline messages; on busy accounts this can take 10-30+ seconds, holding
+	// every buffered event hostage. This timer fires after OFFLINE_BUFFER_TIMEOUT_MS and
+	// force-flushes so live messages are never delayed beyond that cap.
+	// CB:ib,,offline clears the timer when it fires normally (fast path).
+	//
+	// INTENTIONALLY hardcoded — not controlled by BAILEYS_BUFFER_TIMEOUT_MS or any other
+	// env var. BAILEYS_BUFFER_TIMEOUT_MS governs general-purpose buffer batching (for
+	// Prometheus / history consolidation) and is typically set to 5-30 s by operators.
+	// This constant must remain short regardless so that a large offline backlog cannot
+	// hold live incoming messages hostage for minutes.
+	const OFFLINE_BUFFER_TIMEOUT_MS = 5_000
+	let offlineBufferTimeout: NodeJS.Timeout | undefined
+
 	process.nextTick(() => {
 		if (creds.me?.id) {
 			// start buffering important events
 			// if we're logged in
 			ev.buffer()
 			didStartBuffer = true
+
+			// Cap the offline-phase buffer so a large backlog of missed messages
+			// does not delay delivery of the very next live message beyond OFFLINE_BUFFER_TIMEOUT_MS.
+			offlineBufferTimeout = setTimeout(() => {
+				offlineBufferTimeout = undefined
+				if (didStartBuffer) {
+					logger.warn({ timeoutMs: OFFLINE_BUFFER_TIMEOUT_MS }, 'perf: offline-buffer safety timeout reached, force-flushing before CB:ib,,offline')
+					ev.flush()
+					didStartBuffer = false
+				}
+			}, OFFLINE_BUFFER_TIMEOUT_MS)
 		}
 
 		ev.emit('connection.update', { connection: 'connecting', receivedPendingNotifications: false, qr: undefined })
@@ -1589,8 +1626,16 @@ export const makeSocket = (config: SocketConfig) => {
 		const offlineNotifs = +(child?.attrs.count || 0)
 
 		logger.info(`handled ${offlineNotifs} offline messages/notifications`)
+
+		// Clear safety timeout — CB:ib,,offline arrived in time, do the normal flush.
+		if (offlineBufferTimeout) {
+			clearTimeout(offlineBufferTimeout)
+			offlineBufferTimeout = undefined
+		}
+
 		if (didStartBuffer) {
 			ev.flush()
+			didStartBuffer = false
 			logger.trace('flushed events for initial buffer')
 		}
 
