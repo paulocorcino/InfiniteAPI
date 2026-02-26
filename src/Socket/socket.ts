@@ -1499,26 +1499,35 @@ export const makeSocket = (config: SocketConfig) => {
 	})
 	// login complete
 	ws.on('CB:success', async (node: BinaryNode) => {
-		try {
-			await uploadPreKeysToServerIfRequired()
-			await sendPassiveIq('active')
-
-			// After successful login, validate our key-bundle against server
-			try {
-				await digestKeyBundle()
-			} catch (e) {
-				logger.warn({ e }, 'failed to run digest after login')
-			}
-		} catch (err) {
-			logger.warn({ err }, 'failed to send initial passive iq')
-		}
-
 		logger.info('opened connection to WA')
 		clearTimeout(qrTimer) // will never happen in all likelyhood -- but just in case WA sends success on first try
 
 		ev.emit('creds.update', { me: { ...authState.creds.me!, lid: node.attrs.lid } })
 
+		// Emit connection:open immediately so the application layer begins processing
+		// incoming messages without waiting for any WA round-trips.
 		ev.emit('connection.update', { connection: 'open' })
+
+		// ─── Background: sendPassiveIq + pre-key validation + key-bundle digest ──
+		// sendPassiveIq('active') tells the WA edge server to start routing live
+		// messages to this connection. All three operations involve WA round-trips
+		// (100–500 ms each) but none need to complete before the app can handle
+		// messages. Run them in parallel, fire-and-forget, non-blocking.
+		Promise.allSettled([sendPassiveIq('active'), uploadPreKeysToServerIfRequired(), digestKeyBundle()])
+			.then(results => {
+				const [passiveResult] = results
+				if (passiveResult.status === 'rejected') {
+					logger.warn({ err: passiveResult.reason }, 'failed to send initial passive iq')
+				}
+				for (const result of results.slice(1)) {
+					if (result.status === 'rejected') {
+						logger.warn({ err: result.reason }, 'background key operation failed after login (non-critical)')
+					}
+				}
+			})
+			.catch(err => {
+				logger.error({ err }, 'unexpected error in background post-login handler')
+			})
 
 		// Record successful connection metrics
 		recordConnectionAttempt('success')
