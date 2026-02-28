@@ -1667,8 +1667,8 @@ export const makeSocket = (config: SocketConfig) => {
 	// already-authenticated session (no QR re-scan needed). In this case we skip
 	// the offline buffer entirely so live messages are not held hostage waiting for the
 	// server to finish flushing the pending-message backlog (CB:ib,,offline).
-	// For normal restarts (no stale routingInfo) the standard 5 s safety cap applies.
-	const OFFLINE_BUFFER_TIMEOUT_MS = 5_000
+	// For normal restarts (no stale routingInfo) the standard 2 s safety cap applies.
+	const OFFLINE_BUFFER_TIMEOUT_MS = 2_000
 	let offlineBufferTimeout: NodeJS.Timeout | undefined
 
 	process.nextTick(() => {
