@@ -230,14 +230,22 @@ export const bindWaitForConnectionUpdate = (ev: BaileysEventEmitter) => bindWait
  * utility that fetches latest baileys version from the master branch.
  * Use to ensure your WA connection is always on the latest version
  */
-export const fetchLatestBaileysVersion = async (options: RequestInit = {}) => {
+export const fetchLatestBaileysVersion = async (options: RequestInit & { timeout?: number } = {}) => {
 	const URL = 'https://raw.githubusercontent.com/WhiskeySockets/Baileys/master/src/Defaults/index.ts'
 	try {
-		const response = await fetch(URL, {
-			dispatcher: options.dispatcher,
-			method: 'GET',
-			headers: options.headers
-		})
+		const controller = new AbortController()
+		const timeout = setTimeout(() => controller.abort(), options.timeout ?? 5000)
+		let response: Response
+		try {
+			response = await fetch(URL, {
+				dispatcher: options.dispatcher,
+				method: 'GET',
+				headers: options.headers,
+				signal: controller.signal
+			})
+		} finally {
+			clearTimeout(timeout)
+		}
 		if (!response.ok) {
 			throw new Boom(`Failed to fetch latest Baileys version: ${response.statusText}`, { statusCode: response.status })
 		}
